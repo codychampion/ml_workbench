@@ -1,7 +1,7 @@
 # =============================================================================
 # LoRA Trainer Worker
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 LABEL maintainer="MLOps Team"
 LABEL project="lora-trainer"

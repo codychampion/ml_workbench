@@ -9,7 +9,7 @@
 
 # PHASE 2/3 TODO: Switch to CUDA base when ready
 # FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04 AS cuda-base
-FROM python:3.11-slim AS mlops-torch-gpu
+FROM python:3.13-slim AS mlops-torch-gpu
 
 LABEL maintainer="MLOps Team"
 LABEL description="MLOps PyTorch GPU image for Phase 2/3"
