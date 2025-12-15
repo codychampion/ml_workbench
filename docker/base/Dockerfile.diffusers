@@ -1,45 +1,38 @@
 # =============================================================================
-# MLOps Diffusers Image
+# MLOps Dev Container with Diffusers
 # =============================================================================
-# Extends torch image with HuggingFace Diffusers, Transformers, and related
-# libraries for image generation workflows (Flux, Stable Diffusion, etc.)
-#
-# Build: docker build -t mlops-diffusers:latest -f docker/base/Dockerfile.diffusers .
-# =============================================================================
-
-ARG BASE_IMAGE=mlops-torch-cpu:latest
-FROM ${BASE_IMAGE}
+FROM python:3.11-slim
 
 LABEL maintainer="MLOps Team"
-LABEL description="MLOps Diffusers image for image generation"
-LABEL version="1.0.0"
+LABEL description="Development container with full ML stack"
 
-# Install HuggingFace ecosystem
-RUN pip install \
-    transformers>=4.35.0 \
-    diffusers>=0.24.0 \
-    accelerate>=0.25.0 \
-    safetensors>=0.4.0 \
-    huggingface-hub>=0.19.0
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Install image processing libraries
-RUN pip install \
-    opencv-python-headless>=4.8.0 \
-    imageio>=2.31.0 \
-    einops>=0.7.0
+WORKDIR /workspace
 
-# PHASE 2/3 TODO: Install PEFT for LoRA training
-# RUN pip install peft>=0.6.0
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev tini \
+    && rm -rf /var/lib/apt/lists/*
 
-# PHASE 2/3 TODO: Install xformers for memory-efficient attention
-# RUN pip install xformers
+# Create user
+RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
+    && mkdir -p /workspace && chown -R mlops:mlops /workspace
 
-# Set HuggingFace cache directory
-ENV HF_HOME=/workspace/.cache/huggingface
-ENV TRANSFORMERS_CACHE=/workspace/.cache/huggingface/transformers
+# Python dependencies - full stack
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio \
+    wandb fiftyone b2sdk \
+    transformers diffusers accelerate safetensors \
+    Pillow numpy scipy pandas scikit-learn \
+    python-dotenv pyyaml requests tqdm
 
-# Create cache directories
-RUN mkdir -p /workspace/.cache/huggingface && \
-    chown -R mlops:mlops /workspace/.cache
+USER mlops
 
+ENV COMPUTE_DEVICE=cpu
+ENV WANDB_MODE=offline
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/bin/bash"]

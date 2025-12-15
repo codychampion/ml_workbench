@@ -3,191 +3,110 @@
 # =============================================================================
 # Phase 1: Local development environment (CPU-only)
 #
-# This compose file defines:
-# - Base images (built in dependency order)
-# - Service containers (long-running servers)
-# - Worker containers (job executors)
-#
 # Usage:
 #   docker-compose build                    # Build all images
-#   docker-compose up -d                    # Start all services
-#   docker-compose up -d comfyui fiftyone   # Start specific services
-#   docker-compose run flux-gen             # Run a one-off job
-#   docker-compose down                     # Stop all services
+#   docker-compose up -d                    # Start services
+#   docker-compose run --rm flux-gen        # Run a worker job
+#   docker-compose --profile dev up -d      # Start dev shell
+#   docker-compose down                     # Stop all
 #
 # =============================================================================
 
 version: '3.8'
 
-# =============================================================================
-# SERVICES
-# =============================================================================
-
 services:
 
   # ---------------------------------------------------------------------------
-  # BASE IMAGES (build-only, used as base for other images)
+  # SERVICES (long-running)
   # ---------------------------------------------------------------------------
 
-  base:
-    build:
-      context: .
-      dockerfile: docker/base/Dockerfile.base
-    image: mlops-base:latest
-    profiles:
-      - build-only  # Won't start with `docker-compose up`
-
-  torch-cpu:
-    build:
-      context: .
-      dockerfile: docker/base/Dockerfile.torch-cpu
-      args:
-        BASE_IMAGE: mlops-base:latest
-    image: mlops-torch-cpu:latest
-    depends_on:
-      - base
-    profiles:
-      - build-only
-
-  torch-gpu:
-    build:
-      context: .
-      dockerfile: docker/base/Dockerfile.torch-gpu
-    image: mlops-torch-gpu:latest
-    profiles:
-      - build-only
-      - gpu
-
-  diffusers:
-    build:
-      context: .
-      dockerfile: docker/base/Dockerfile.diffusers
-      args:
-        BASE_IMAGE: mlops-torch-cpu:latest
-    image: mlops-diffusers:latest
-    depends_on:
-      - torch-cpu
-    profiles:
-      - build-only
-
-  # ---------------------------------------------------------------------------
-  # SERVICE CONTAINERS (long-running)
-  # ---------------------------------------------------------------------------
-
-  # ComfyUI - Node-based image generation server
   comfyui:
     build:
       context: .
       dockerfile: services/comfyui/Dockerfile
-      args:
-        BASE_IMAGE: mlops-torch-cpu:latest
     image: mlops-comfyui:latest
     container_name: mlops-comfyui
     restart: unless-stopped
-
     ports:
       - "8188:8188"
-
     volumes:
       - ./services/comfyui:/workspace/comfyui/config:ro
       - comfyui-models:/workspace/comfyui/models
       - comfyui-output:/workspace/comfyui/output
       - comfyui-input:/workspace/comfyui/input
-
     environment:
       - COMFYUI_HOST=0.0.0.0
       - COMFYUI_PORT=8188
       - COMPUTE_DEVICE=cpu
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8188/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-
     networks:
       - mlops-network
-
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 4G
 
-  # FiftyOne - Data visualization server
   fiftyone:
     build:
       context: .
       dockerfile: services/fiftyone/Dockerfile
-      args:
-        BASE_IMAGE: mlops-torch-cpu:latest
     image: mlops-fiftyone:latest
     container_name: mlops-fiftyone
     restart: unless-stopped
-
     ports:
       - "5151:5151"
-
     volumes:
       - ./services/fiftyone:/workspace/fiftyone/config:ro
       - fiftyone-data:/workspace/fiftyone/datasets
       - fiftyone-db:/workspace/fiftyone/database
       - ./data:/workspace/data:ro
-
     environment:
       - FIFTYONE_APP_ADDRESS=0.0.0.0
       - FIFTYONE_APP_PORT=5151
       - FIFTYONE_DATABASE_DIR=/workspace/fiftyone/database
       - FIFTYONE_AUTO_LOAD_QUICKSTART=true
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5151"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
-
     networks:
       - mlops-network
-
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 4G
 
-  # W&B Local Utilities
   wandb-local:
     build:
       context: .
       dockerfile: services/wandb-local/Dockerfile
-      args:
-        BASE_IMAGE: mlops-base:latest
     image: mlops-wandb-local:latest
     container_name: mlops-wandb-local
     restart: unless-stopped
-
     ports:
       - "8080:8080"
-
     volumes:
       - wandb-runs:/workspace/wandb/runs
       - wandb-artifacts:/workspace/wandb/artifacts
-
     environment:
       - WANDB_MODE=offline
       - WANDB_DIR=/workspace/wandb/runs
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-
     networks:
       - mlops-network
-
     deploy:
       resources:
         limits:
@@ -195,107 +114,79 @@ services:
           memory: 1G
 
   # ---------------------------------------------------------------------------
-  # WORKER CONTAINERS (job executors)
+  # WORKERS (job executors) - use: docker-compose run --rm <worker>
   # ---------------------------------------------------------------------------
 
-  # Flux Image Generation Worker
   flux-gen:
     build:
       context: .
       dockerfile: projects/flux-comfyui-generation/Dockerfile
-      args:
-        BASE_IMAGE: mlops-diffusers:latest
     image: mlops-flux-gen:latest
-    container_name: mlops-flux-gen
-
     volumes:
       - .:/workspace:cached
       - wandb-runs:/workspace/outputs/wandb
       - flux-output:/workspace/outputs/flux-generations
-
     environment:
       - WANDB_MODE=offline
       - WANDB_PROJECT=flux-comfyui-generation
       - WANDB_DIR=/workspace/outputs/wandb
       - COMPUTE_DEVICE=cpu
       - B2_LOCAL_MANIFEST=/workspace/.b2_local_manifest.json
-
     networks:
       - mlops-network
-
     profiles:
       - workers
-
     deploy:
       resources:
         limits:
           cpus: '4'
           memory: 8G
 
-  # Adversarial Patches Worker
   adv-patches:
     build:
       context: .
       dockerfile: projects/adversarial-patches/Dockerfile
-      args:
-        BASE_IMAGE: mlops-torch-cpu:latest
     image: mlops-adv-patches:latest
-    container_name: mlops-adv-patches
-
     volumes:
       - .:/workspace:cached
       - wandb-runs:/workspace/outputs/wandb
       - adv-output:/workspace/outputs/adversarial-patches
       - fiftyone-data:/workspace/data/fiftyone
-
     environment:
       - WANDB_MODE=offline
       - WANDB_PROJECT=adversarial-patches
       - WANDB_DIR=/workspace/outputs/wandb
       - FIFTYONE_DATABASE_DIR=/workspace/data/fiftyone
       - COMPUTE_DEVICE=cpu
-
     networks:
       - mlops-network
-
     profiles:
       - workers
-
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 4G
 
-  # LoRA Trainer Worker
   lora-trainer:
     build:
       context: .
       dockerfile: projects/lora-trainer/Dockerfile
-      args:
-        BASE_IMAGE: mlops-diffusers:latest
     image: mlops-lora-trainer:latest
-    container_name: mlops-lora-trainer
-
     volumes:
       - .:/workspace:cached
       - wandb-runs:/workspace/outputs/wandb
       - lora-checkpoints:/workspace/outputs/lora-checkpoints
       - lora-data:/workspace/data/lora-training
-
     environment:
       - WANDB_MODE=offline
       - WANDB_PROJECT=lora-trainer
       - WANDB_DIR=/workspace/outputs/wandb
       - COMPUTE_DEVICE=cpu
-
     networks:
       - mlops-network
-
     profiles:
       - workers
-      - training
-
     deploy:
       resources:
         limits:
@@ -303,41 +194,32 @@ services:
           memory: 8G
 
   # ---------------------------------------------------------------------------
-  # DEVELOPMENT SHELL (interactive development)
+  # DEV SHELL - use: docker-compose --profile dev up -d dev
   # ---------------------------------------------------------------------------
 
   dev:
     build:
       context: .
       dockerfile: docker/base/Dockerfile.diffusers
-      args:
-        BASE_IMAGE: mlops-torch-cpu:latest
     image: mlops-dev:latest
     container_name: mlops-dev
-
     volumes:
       - .:/workspace:cached
       - wandb-runs:/workspace/outputs/wandb
       - fiftyone-data:/workspace/data/fiftyone
-
     environment:
       - MLOPS_ENV=development
       - DEBUG=true
       - WANDB_MODE=offline
       - COMPUTE_DEVICE=cpu
-
     ports:
-      - "8888:8888"  # Jupyter
-
+      - "8888:8888"
     stdin_open: true
     tty: true
-
     networks:
       - mlops-network
-
     profiles:
       - dev
-
     deploy:
       resources:
         limits:
@@ -345,47 +227,13 @@ services:
           memory: 8G
 
 # =============================================================================
-# PHASE 2/3 TODO: Orchestration Services
+# PHASE 2/3 TODO: Orchestration
 # =============================================================================
-
+#
 #   prefect-server:
 #     image: prefecthq/prefect:2-python3.11
-#     container_name: prefect-server
-#     command: prefect server start --host 0.0.0.0
 #     ports:
 #       - "4200:4200"
-#     environment:
-#       - PREFECT_SERVER_API_HOST=0.0.0.0
-#     networks:
-#       - mlops-network
-#     volumes:
-#       - prefect-data:/root/.prefect
-#     profiles:
-#       - orchestration
-
-#   prefect-worker:
-#     build:
-#       context: .
-#       dockerfile: docker/base/Dockerfile.torch-gpu
-#     command: prefect worker start --pool gpu-pool
-#     depends_on:
-#       - prefect-server
-#     environment:
-#       - PREFECT_API_URL=http://prefect-server:4200/api
-#     networks:
-#       - mlops-network
-#     profiles:
-#       - orchestration
-
-#   redis:
-#     image: redis:7-alpine
-#     container_name: mlops-redis
-#     ports:
-#       - "6379:6379"
-#     volumes:
-#       - redis-data:/data
-#     networks:
-#       - mlops-network
 #     profiles:
 #       - orchestration
 
@@ -394,37 +242,17 @@ services:
 # =============================================================================
 
 volumes:
-  # Service data
   comfyui-models:
-    driver: local
   comfyui-output:
-    driver: local
   comfyui-input:
-    driver: local
   fiftyone-data:
-    driver: local
   fiftyone-db:
-    driver: local
   wandb-runs:
-    driver: local
   wandb-artifacts:
-    driver: local
-
-  # Worker outputs
   flux-output:
-    driver: local
   adv-output:
-    driver: local
   lora-checkpoints:
-    driver: local
   lora-data:
-    driver: local
-
-  # PHASE 2/3 TODO:
-  # prefect-data:
-  #   driver: local
-  # redis-data:
-  #   driver: local
 
 # =============================================================================
 # NETWORKS
@@ -433,18 +261,3 @@ volumes:
 networks:
   mlops-network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.28.0.0/16
-
-# =============================================================================
-# PHASE 2/3 TODO: Secrets
-# =============================================================================
-
-# secrets:
-#   wandb_api_key:
-#     file: ./secrets/wandb_api_key.txt
-#   b2_credentials:
-#     file: ./secrets/b2_credentials.json
-#   hf_token:
-#     file: ./secrets/hf_token.txt

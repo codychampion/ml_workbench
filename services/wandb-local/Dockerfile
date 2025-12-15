@@ -1,26 +1,29 @@
 # =============================================================================
 # W&B Local Service Container
 # =============================================================================
-# Provides local W&B experiment tracking infrastructure.
-# Phase 1: Runs wandb local server for offline syncing.
-# Phase 2/3: Can be replaced with W&B Server or cloud.
-#
-# Build: docker build -t mlops-wandb-local:latest -f services/wandb-local/Dockerfile .
-# =============================================================================
-
-ARG BASE_IMAGE=mlops-base:latest
-FROM ${BASE_IMAGE}
+FROM python:3.11-slim
 
 LABEL maintainer="MLOps Team"
-LABEL description="W&B local server for experiment tracking"
-LABEL version="1.0.0"
 LABEL service="wandb-local"
 
-# Install W&B
-RUN pip install \
-    wandb>=0.16.0
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Create W&B directories
+WORKDIR /workspace
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create user
+RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
+    && mkdir -p /workspace && chown -R mlops:mlops /workspace
+
+# Python dependencies
+RUN pip install --no-cache-dir wandb
+
+# Create directories
 RUN mkdir -p /workspace/wandb/{runs,artifacts,cache} \
     && chown -R mlops:mlops /workspace/wandb
 
@@ -31,17 +34,13 @@ COPY --chown=mlops:mlops services/wandb-local/config.yaml /workspace/wandb/
 USER mlops
 WORKDIR /workspace/wandb
 
-# W&B environment
-ENV WANDB_DIR=/workspace/wandb/runs
-ENV WANDB_CACHE_DIR=/workspace/wandb/cache
 ENV WANDB_MODE=offline
-ENV WANDB_SILENT=false
+ENV WANDB_DIR=/workspace/wandb/runs
 
-# The local server typically uses port 8080
 EXPOSE 8080
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import wandb; print('healthy')" || exit 1
+    CMD curl -f http://localhost:8080/health || exit 1
 
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["python", "server.py"]

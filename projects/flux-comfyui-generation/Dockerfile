@@ -1,29 +1,33 @@
 # =============================================================================
 # Flux ComfyUI Generation Worker
 # =============================================================================
-# Worker container for running image generation jobs.
-# Can be run as a batch job or as a persistent worker.
-#
-# Build: docker build -t mlops-flux-gen:latest -f projects/flux-comfyui-generation/Dockerfile .
-# Run:   docker run mlops-flux-gen:latest python run_generation.py --prompts "..."
-# =============================================================================
-
-ARG BASE_IMAGE=mlops-diffusers:latest
-FROM ${BASE_IMAGE}
+FROM python:3.11-slim
 
 LABEL maintainer="MLOps Team"
-LABEL description="Flux image generation worker"
-LABEL version="1.0.0"
 LABEL project="flux-comfyui-generation"
 
-# Install additional dependencies for this project
-RUN pip install \
-    wandb>=0.16.0
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Create project directories
-RUN mkdir -p /workspace/projects/flux-comfyui-generation \
-    /workspace/outputs/flux-generations \
-    /workspace/data/flux \
+WORKDIR /workspace
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create user
+RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
+    && mkdir -p /workspace && chown -R mlops:mlops /workspace
+
+# Python dependencies
+RUN pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision \
+    wandb Pillow numpy b2sdk python-dotenv
+
+# Create directories
+RUN mkdir -p /workspace/outputs/flux-generations /workspace/data \
     && chown -R mlops:mlops /workspace
 
 # Copy project files
@@ -32,17 +36,8 @@ COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
 COPY --chown=mlops:mlops projects/flux-comfyui-generation/ /workspace/projects/flux-comfyui-generation/
 
 USER mlops
-WORKDIR /workspace
 
-# Environment
 ENV WANDB_MODE=offline
-ENV WANDB_PROJECT=flux-comfyui-generation
-ENV WANDB_DIR=/workspace/outputs/wandb
 ENV COMPUTE_DEVICE=cpu
 
-# PHASE 2/3 TODO: GPU configuration
-# ENV COMPUTE_DEVICE=cuda
-# ENV CUDA_VISIBLE_DEVICES=0
-
-# Default command
 CMD ["python", "projects/flux-comfyui-generation/run_generation.py"]
