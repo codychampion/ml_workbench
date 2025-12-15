@@ -1,7 +1,7 @@
 # =============================================================================
 # MLOps Dev Container with Diffusers
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 LABEL maintainer="MLOps Team"
 LABEL description="Development container with full ML stack"
