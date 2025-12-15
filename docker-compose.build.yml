@@ -1,0 +1,147 @@
+# =============================================================================
+# Docker Compose Build Configuration
+# =============================================================================
+# Use this file to build all images in the correct dependency order.
+#
+# Usage:
+#   docker-compose -f docker-compose.build.yml build
+#
+# Or build specific images:
+#   docker-compose -f docker-compose.build.yml build base torch-cpu
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Layer 1: Base Image
+  # ---------------------------------------------------------------------------
+
+  base:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile.base
+      cache_from:
+        - mlops-base:latest
+    image: mlops-base:latest
+
+  # ---------------------------------------------------------------------------
+  # Layer 2: PyTorch Images (depend on base)
+  # ---------------------------------------------------------------------------
+
+  torch-cpu:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile.torch-cpu
+      args:
+        BASE_IMAGE: mlops-base:latest
+      cache_from:
+        - mlops-torch-cpu:latest
+    image: mlops-torch-cpu:latest
+    depends_on:
+      - base
+
+  torch-gpu:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile.torch-gpu
+      cache_from:
+        - mlops-torch-gpu:latest
+    image: mlops-torch-gpu:latest
+
+  # ---------------------------------------------------------------------------
+  # Layer 3: ML Framework Images (depend on torch)
+  # ---------------------------------------------------------------------------
+
+  diffusers:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile.diffusers
+      args:
+        BASE_IMAGE: mlops-torch-cpu:latest
+      cache_from:
+        - mlops-diffusers:latest
+    image: mlops-diffusers:latest
+    depends_on:
+      - torch-cpu
+
+  # ---------------------------------------------------------------------------
+  # Layer 4: Service Images
+  # ---------------------------------------------------------------------------
+
+  comfyui:
+    build:
+      context: .
+      dockerfile: services/comfyui/Dockerfile
+      args:
+        BASE_IMAGE: mlops-torch-cpu:latest
+      cache_from:
+        - mlops-comfyui:latest
+    image: mlops-comfyui:latest
+    depends_on:
+      - torch-cpu
+
+  fiftyone:
+    build:
+      context: .
+      dockerfile: services/fiftyone/Dockerfile
+      args:
+        BASE_IMAGE: mlops-torch-cpu:latest
+      cache_from:
+        - mlops-fiftyone:latest
+    image: mlops-fiftyone:latest
+    depends_on:
+      - torch-cpu
+
+  wandb-local:
+    build:
+      context: .
+      dockerfile: services/wandb-local/Dockerfile
+      args:
+        BASE_IMAGE: mlops-base:latest
+      cache_from:
+        - mlops-wandb-local:latest
+    image: mlops-wandb-local:latest
+    depends_on:
+      - base
+
+  # ---------------------------------------------------------------------------
+  # Layer 5: Worker Images
+  # ---------------------------------------------------------------------------
+
+  flux-gen:
+    build:
+      context: .
+      dockerfile: projects/flux-comfyui-generation/Dockerfile
+      args:
+        BASE_IMAGE: mlops-diffusers:latest
+      cache_from:
+        - mlops-flux-gen:latest
+    image: mlops-flux-gen:latest
+    depends_on:
+      - diffusers
+
+  adv-patches:
+    build:
+      context: .
+      dockerfile: projects/adversarial-patches/Dockerfile
+      args:
+        BASE_IMAGE: mlops-torch-cpu:latest
+      cache_from:
+        - mlops-adv-patches:latest
+    image: mlops-adv-patches:latest
+    depends_on:
+      - torch-cpu
+
+  lora-trainer:
+    build:
+      context: .
+      dockerfile: projects/lora-trainer/Dockerfile
+      args:
+        BASE_IMAGE: mlops-diffusers:latest
+      cache_from:
+        - mlops-lora-trainer:latest
+    image: mlops-lora-trainer:latest
+    depends_on:
+      - diffusers

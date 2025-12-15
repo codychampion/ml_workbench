@@ -1,43 +1,50 @@
 # MLOps Workspace
 
-A professional MLOps repository focused on **reproducibility** and **experiment tracking**. This workspace provides a complete pipeline infrastructure for machine learning projects with integrated tooling for data management, experiment tracking, and visualization.
+A professional MLOps repository with a **multi-container architecture** focused on reproducibility, experiment tracking, and modular service deployment.
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        MLOps Workspace Architecture                      │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────────┐  │
-│  │   Projects   │    │   Storage    │    │   Experiment Tracking    │  │
-│  ├──────────────┤    ├──────────────┤    ├──────────────────────────┤  │
-│  │ flux-comfyui │───▶│  B2 Client   │───▶│   Weights & Biases       │  │
-│  │ adversarial  │    │  (Mocked P1) │    │   (Offline Mode P1)      │  │
-│  └──────────────┘    └──────────────┘    └──────────────────────────┘  │
-│         │                   │                        │                  │
-│         ▼                   ▼                        ▼                  │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │                    FiftyOne Visualization                         │  │
-│  │                    (Local Data Exploration)                       │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    Multi-Container MLOps Architecture                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  BASE IMAGES (Build Hierarchy)                                               │
+│  ┌────────────┐    ┌────────────┐    ┌────────────┐    ┌────────────┐       │
+│  │ mlops-base │───▶│torch-cpu/  │───▶│ diffusers  │───▶│  Workers   │       │
+│  │  (python)  │    │  torch-gpu │    │ (HF libs)  │    │            │       │
+│  └────────────┘    └────────────┘    └────────────┘    └────────────┘       │
+│                                                                              │
+│  SERVICE CONTAINERS (Long-running)                                           │
+│  ┌────────────┐    ┌────────────┐    ┌────────────┐                         │
+│  │  ComfyUI   │    │  FiftyOne  │    │ W&B Local  │                         │
+│  │   :8188    │    │   :5151    │    │   :8080    │                         │
+│  └────────────┘    └────────────┘    └────────────┘                         │
+│                                                                              │
+│  WORKER CONTAINERS (Job Executors)                                           │
+│  ┌────────────┐    ┌────────────┐    ┌────────────┐                         │
+│  │  flux-gen  │    │adv-patches │    │lora-trainer│                         │
+│  │ (generate) │    │ (attacks)  │    │ (training) │                         │
+│  └────────────┘    └────────────┘    └────────────┘                         │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Phases
+## Container Strategy
 
-### Phase 1: Local Core (Current)
-- **Environment**: CPU-only, resource-constrained development
-- **Storage**: Mocked B2 client using local manifest
-- **Tracking**: W&B offline mode
-- **Visualization**: FiftyOne local server
+| Type | Purpose | Examples |
+|------|---------|----------|
+| **Base Images** | Shared dependencies, faster builds | `mlops-base`, `mlops-torch-cpu`, `mlops-diffusers` |
+| **Service Containers** | Long-running servers | ComfyUI, FiftyOne, W&B utilities |
+| **Worker Containers** | Job execution | Image generation, LoRA training, adversarial patches |
 
-### Phase 2/3: Scaling (Future)
-- **Orchestration**: Prefect for workflow management
-- **Compute**: SkyPilot for cloud GPU provisioning
-- **Storage**: Full B2 integration with encryption
-- **Tracking**: W&B online with team collaboration
+### Benefits
+
+- **Dependency Isolation**: Each service has its own dependencies
+- **GPU Allocation**: Training gets A100, serving gets T4
+- **Independent Scaling**: Scale inference without touching training
+- **Faster Builds**: Layered images share common dependencies
+- **Easy Updates**: Update ComfyUI without rebuilding training images
 
 ---
 
@@ -45,78 +52,64 @@ A professional MLOps repository focused on **reproducibility** and **experiment 
 
 ### Prerequisites
 
-- Docker and Docker Compose
-- Git
+- Docker and Docker Compose v2
 - 8GB RAM recommended (4GB minimum)
+- For GPU: NVIDIA Container Toolkit
 
-### Phase 1 Execution Steps
-
-#### 1. Clone and Setup
+### Phase 1: Build Images
 
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd mlops-workspace
+# Build all images in dependency order
+docker-compose -f docker-compose.build.yml build
 
-# Create required directories
-mkdir -p data/raw data/processed outputs/wandb outputs/models
+# Or build specific images
+docker-compose -f docker-compose.build.yml build base torch-cpu
 ```
 
-#### 2. Build and Start Container
+### Phase 1: Start Services
 
 ```bash
-# Build the Docker image
-docker-compose build
-
-# Start the container
+# Start all services (ComfyUI, FiftyOne, W&B)
 docker-compose up -d
 
-# Enter the container
-docker-compose exec mlops bash
+# Start specific services
+docker-compose up -d comfyui fiftyone
+
+# View logs
+docker-compose logs -f comfyui
 ```
 
-#### 3. Run Image Generation Pipeline (Flux-ComfyUI)
+### Access Services
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| ComfyUI | http://localhost:8188 | Node-based image generation |
+| FiftyOne | http://localhost:5151 | Data visualization |
+| W&B Local | http://localhost:8080 | Experiment tracking utilities |
+
+### Run Workers
 
 ```bash
-# Inside the container
-python projects/flux-comfyui-generation/run_generation.py \
-    --prompts "A mountain at sunset" "A futuristic city" \
-    --output-dir ./outputs/flux-generations \
-    --width 256 \
-    --height 256 \
-    --seed 42
+# Run image generation
+docker-compose run --rm flux-gen python projects/flux-comfyui-generation/run_generation.py \
+    --prompts "A mountain at sunset" "A futuristic city"
+
+# Run adversarial patches
+docker-compose run --rm adv-patches python projects/adversarial-patches/generate_patch.py
+
+# Run LoRA training
+docker-compose run --rm lora-trainer python projects/lora-trainer/train_lora.py --epochs 10
 ```
 
-**Expected Output:**
-- Generated images saved to `./outputs/flux-generations/`
-- W&B run saved to `./outputs/wandb/offline-*/`
-- Uploaded to mocked B2 storage
-
-#### 4. Run Adversarial Patch Pipeline
+### Development Shell
 
 ```bash
-# Generate adversarial patches and visualize with FiftyOne
-python projects/adversarial-patches/generate_patch.py \
-    --output-dir ./outputs/adversarial-patches \
-    --patch-size 64 64 \
-    --num-samples 5 \
-    --patterns noise checkerboard gradient \
-    --launch-app
-```
+# Start interactive development container
+docker-compose --profile dev up -d dev
+docker-compose exec dev bash
 
-**Expected Output:**
-- Patched images saved to `./outputs/adversarial-patches/`
-- FiftyOne dataset created for visualization
-- FiftyOne app launched at http://localhost:5151
-
-#### 5. View W&B Results (Offline)
-
-```bash
-# Sync offline runs when you have internet access
-wandb sync ./outputs/wandb/offline-*
-
-# Or view locally without syncing
-ls -la ./outputs/wandb/
+# Inside container, all tools are available
+python projects/flux-comfyui-generation/run_generation.py
 ```
 
 ---
@@ -125,356 +118,296 @@ ls -la ./outputs/wandb/
 
 ```
 mlops-workspace/
-├── Dockerfile                      # CPU-optimized container
-├── docker-compose.yml              # Service orchestration
-├── requirements.txt                # Python dependencies
-├── config.py                       # Central configuration
-├── .b2_local_manifest.json         # Mocked B2 file manifest
+├── docker/
+│   └── base/
+│       ├── Dockerfile.base          # Python base image
+│       ├── Dockerfile.torch-cpu     # PyTorch CPU
+│       ├── Dockerfile.torch-gpu     # PyTorch GPU (Phase 2/3)
+│       └── Dockerfile.diffusers     # HuggingFace stack
 │
-├── data_transfer/                  # Cloud storage module
-│   ├── __init__.py
-│   └── b2_client.py               # B2 client (mocked in Phase 1)
+├── services/
+│   ├── comfyui/
+│   │   ├── Dockerfile               # ComfyUI service
+│   │   ├── server.py                # Mock server (Phase 1)
+│   │   └── config.yaml
+│   ├── fiftyone/
+│   │   ├── Dockerfile               # FiftyOne service
+│   │   ├── server.py
+│   │   └── config.yaml
+│   └── wandb-local/
+│       ├── Dockerfile               # W&B utilities
+│       ├── server.py
+│       └── config.yaml
 │
 ├── projects/
 │   ├── flux-comfyui-generation/
-│   │   ├── __init__.py
-│   │   └── run_generation.py      # Image generation pipeline
-│   │
-│   └── adversarial-patches/
-│       ├── __init__.py
-│       └── generate_patch.py      # Adversarial attack pipeline
+│   │   ├── Dockerfile               # Generation worker
+│   │   └── run_generation.py
+│   ├── adversarial-patches/
+│   │   ├── Dockerfile               # Adversarial worker
+│   │   └── generate_patch.py
+│   └── lora-trainer/
+│       ├── Dockerfile               # Training worker
+│       └── train_lora.py
 │
-├── data/
-│   ├── raw/                       # Raw input data
-│   ├── processed/                 # Processed data
-│   └── fiftyone/                  # FiftyOne database
+├── data_transfer/
+│   ├── __init__.py
+│   └── b2_client.py                 # Mocked B2 client
 │
-└── outputs/
-    ├── wandb/                     # W&B offline runs
-    ├── models/                    # Saved models
-    └── logs/                      # Application logs
+├── docker-compose.yml               # Main compose file
+├── docker-compose.override.yml      # Local dev overrides
+├── docker-compose.gpu.yml           # GPU configuration
+├── docker-compose.build.yml         # Build order
+├── config.py                        # Central configuration
+├── requirements.txt                 # Python dependencies
+└── .b2_local_manifest.json          # Mocked B2 manifest
 ```
 
 ---
 
-## Tool Integration Guide
+## Docker Compose Profiles
+
+The compose file uses profiles to organize containers:
+
+```bash
+# Default: Start services only (comfyui, fiftyone, wandb-local)
+docker-compose up -d
+
+# Include workers
+docker-compose --profile workers up -d
+
+# Include training workers
+docker-compose --profile training up -d
+
+# Development shell
+docker-compose --profile dev up -d
+
+# GPU-enabled (Phase 2/3)
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+```
+
+---
+
+## GPU Configuration (Phase 2/3)
+
+For GPU-enabled containers:
+
+```bash
+# Use the GPU override file
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+
+# Or set as default
+export COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+docker-compose up -d
+```
+
+The GPU compose file configures:
+- NVIDIA Container Toolkit integration
+- CUDA visibility settings
+- GPU memory management
+- Multi-GPU distributed training (planned)
+
+---
+
+## Tool Integration
 
 ### Weights & Biases (W&B)
 
-**Phase 1 Configuration:**
+All workers use W&B offline mode in Phase 1:
+
 ```python
 import wandb
 
 wandb.init(
-    project="mlops-workspace",
-    mode="offline",  # Required for Phase 1
-    dir="./outputs/wandb"
+    project="my-project",
+    mode="offline",  # Phase 1
+    dir="/workspace/outputs/wandb"
 )
 
-# Log metrics
 wandb.log({"loss": 0.5, "accuracy": 0.95})
-
-# Log images
-wandb.log({"image": wandb.Image(numpy_array)})
 ```
 
-**Environment Variables:**
+**Sync offline runs:**
 ```bash
-WANDB_MODE=offline
-WANDB_PROJECT=mlops-workspace
-WANDB_DIR=/workspace/outputs/wandb
+wandb sync ./outputs/wandb/offline-*
 ```
-
-<!-- PHASE 2/3 TODO: W&B Online Configuration
-export WANDB_API_KEY=your-api-key
-export WANDB_MODE=online
-export WANDB_ENTITY=your-team
--->
 
 ### FiftyOne
 
-**Loading and Visualizing Data:**
+Access the FiftyOne app at http://localhost:5151
+
 ```python
 import fiftyone as fo
-import fiftyone.zoo as foz
 
-# Load a small dataset
-dataset = foz.load_zoo_dataset("quickstart", max_samples=10)
+# Load a dataset
+dataset = fo.load_dataset("my-dataset")
 
-# Launch visualization app
-session = fo.launch_app(dataset, port=5151)
+# The app is already running as a service
+# Just load data and it appears in the UI
 ```
-
-**Access**: http://localhost:5151
 
 ### Backblaze B2 (Mocked)
 
-**Phase 1 Usage:**
+Phase 1 uses a mocked client:
+
 ```python
 from data_transfer import B2Client
 
-# Automatically uses MockedB2Client in Phase 1
 client = B2Client()
 
-# List files from local manifest
+# Lists from .b2_local_manifest.json
 files = client.list_files(prefix="datasets/")
 
-# Download (copies from local data/raw/)
+# Copies from local data/raw/
 client.download_file("image.png", Path("./output.png"))
-
-# Upload (copies to local data/raw/ and updates manifest)
-client.upload_file(Path("./output.png"), "uploads/output.png")
 ```
 
-**Local Manifest** (`.b2_local_manifest.json`):
-```json
-{
-  "bucket_name": "mlops-data-bucket-mock",
-  "files": [
-    {
-      "file_name": "datasets/sample_images/image_001.png",
-      "file_id": "mock_file_001",
-      "size_bytes": 1024,
-      "content_sha256": "..."
-    }
-  ]
-}
-```
+### ComfyUI
+
+Access at http://localhost:8188
+
+In Phase 1, uses a mock server that generates placeholder images.
 
 ---
 
-## Configuration
+## Adding New Projects
 
-All configuration is managed through environment variables with sensible defaults.
+1. Create project directory:
+```bash
+mkdir -p projects/my-new-project
+```
 
-### Core Environment Variables
+2. Create Dockerfile:
+```dockerfile
+ARG BASE_IMAGE=mlops-diffusers:latest
+FROM ${BASE_IMAGE}
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MLOPS_ENV` | `development` | Environment identifier |
-| `DEBUG` | `false` | Enable debug logging |
-| `COMPUTE_DEVICE` | `cpu` | Compute device (Phase 1: always cpu) |
-| `NUM_WORKERS` | `2` | Number of worker processes |
+COPY --chown=mlops:mlops projects/my-new-project/ /workspace/projects/my-new-project/
+CMD ["python", "projects/my-new-project/main.py"]
+```
 
-### W&B Configuration
+3. Add to docker-compose.yml:
+```yaml
+my-new-project:
+  build:
+    context: .
+    dockerfile: projects/my-new-project/Dockerfile
+  profiles:
+    - workers
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `WANDB_MODE` | `offline` | W&B mode (offline for Phase 1) |
-| `WANDB_PROJECT` | `mlops-workspace` | W&B project name |
-| `WANDB_DIR` | `./outputs/wandb` | W&B local directory |
-
-### B2 Configuration (Phase 1: Mocked)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `B2_LOCAL_MANIFEST` | `.b2_local_manifest.json` | Local manifest file |
-| `B2_LOCAL_DATA_DIR` | `./data/raw` | Local data directory |
-| `B2_MAX_REQUESTS_PER_MIN` | `100` | Rate limit (simulated) |
+4. Run:
+```bash
+docker-compose run --rm my-new-project
+```
 
 ---
 
 ## Phase 2/3 Roadmap
 
-### Prefect Integration (Workflow Orchestration)
+### Prefect Integration
 
-<!-- PHASE 2/3 TODO: Prefect Setup -->
-
-Prefect will provide:
-- **DAG-based workflows**: Define multi-step pipelines (Data Prep → Train → Deploy)
-- **Scheduling**: Cron-based and event-driven triggers
-- **Retries**: Automatic retry with exponential backoff
-- **Observability**: Real-time workflow monitoring
-
-**Planned Architecture:**
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Prefect Flow: Training Pipeline               │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐  │
-│  │  Fetch   │───▶│ Preprocess│───▶│  Train   │───▶│  Deploy  │  │
-│  │   Data   │    │   Data   │    │  Model   │    │  Model   │  │
-│  └──────────┘    └──────────┘    └──────────┘    └──────────┘  │
-│       │               │               │               │         │
-│       ▼               ▼               ▼               ▼         │
-│  [B2 Storage]   [FiftyOne QA]  [W&B Tracking]  [Model Registry] │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Example Flow (Future):**
-```python
-from prefect import flow, task
-
-@task(retries=3, retry_delay_seconds=60)
-def fetch_data(dataset_id: str):
-    """Fetch data from B2 storage."""
-    pass
-
-@task
-def train_model(data, config: dict):
-    """Train model with W&B tracking."""
-    pass
-
-@flow(name="training-pipeline")
-def training_flow(config: dict):
-    data = fetch_data(config["dataset_id"])
-    model = train_model(data, config)
-    return model
-```
-
-### SkyPilot Integration (Cloud GPU Provisioning)
-
-<!-- PHASE 2/3 TODO: SkyPilot Setup -->
-
-SkyPilot will provide:
-- **Multi-cloud support**: AWS, GCP, Azure
-- **Cost optimization**: Automatic spot instance selection
-- **GPU provisioning**: A100, V100, T4 instances
-- **Reproducibility**: Identical environments across clouds
-
-**Planned Usage:**
-```python
-import sky
-
-# Define task
-task = sky.Task(
-    run="python train.py --gpu",
-    setup="pip install -r requirements.txt"
-)
-
-# Configure resources
-task.set_resources(sky.Resources(
-    accelerators={"A100": 1},
-    cloud=sky.AWS(),
-    use_spot=True,
-    disk_size=256
-))
-
-# Launch
-sky.launch(task, cluster_name="training-cluster")
-```
-
-**Sky YAML Configuration (Future):**
 ```yaml
-# sky.yaml
+# Uncomment in docker-compose.yml
+prefect-server:
+  image: prefecthq/prefect:2-python3.11
+  ports:
+    - "4200:4200"
+```
+
+### SkyPilot Integration
+
+```yaml
+# sky.yaml for cloud GPU provisioning
 resources:
   accelerators: A100:1
   use_spot: true
-  disk_size: 256
-
-setup: |
-  pip install -r requirements.txt
-  wandb login $WANDB_API_KEY
 
 run: |
-  python projects/flux-comfyui-generation/run_generation.py --gpu
+  python projects/lora-trainer/train_lora.py --device cuda
 ```
+
+### Production Checklist
+
+- [ ] Enable W&B online mode with API keys
+- [ ] Configure real B2 storage with encryption
+- [ ] Set up Prefect for workflow orchestration
+- [ ] Deploy GPU workers via SkyPilot
+- [ ] Add secrets management
+- [ ] Configure monitoring (Prometheus/Grafana)
 
 ---
 
-## Development
-
-### Running Tests
+## Common Commands
 
 ```bash
-# Inside container
-pytest tests/ -v --cov=.
+# Build all images
+docker-compose -f docker-compose.build.yml build
 
-# Run specific test
-pytest tests/test_b2_client.py -v
+# Start services
+docker-compose up -d
+
+# Run a worker job
+docker-compose run --rm flux-gen
+
+# View logs
+docker-compose logs -f comfyui
+
+# Stop all
+docker-compose down
+
+# Clean up volumes
+docker-compose down -v
+
+# Rebuild a specific image
+docker-compose build --no-cache comfyui
+
+# Shell into a running container
+docker-compose exec fiftyone bash
 ```
-
-### Code Quality
-
-```bash
-# Format code
-black .
-
-# Lint
-ruff check .
-```
-
-### Adding New Projects
-
-1. Create project directory:
-   ```bash
-   mkdir -p projects/my-new-project
-   ```
-
-2. Create `__init__.py` and main script following existing patterns
-
-3. Use the standard imports:
-   ```python
-   from config import get_config
-   from data_transfer import B2Client
-   import wandb
-   import fiftyone as fo
-   ```
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+### Build Failures
 
-**FiftyOne Port Already in Use:**
 ```bash
-# Find and kill process on port 5151
-lsof -i :5151 | grep LISTEN
+# Build with verbose output
+docker-compose -f docker-compose.build.yml build --progress=plain
+
+# Clean build cache
+docker builder prune
+```
+
+### Port Conflicts
+
+```bash
+# Check what's using a port
+lsof -i :8188
+lsof -i :5151
+
+# Kill the process
 kill -9 <PID>
 ```
 
-**W&B Offline Mode Issues:**
-```bash
-# Check WANDB_MODE is set
-echo $WANDB_MODE  # Should be "offline"
+### GPU Not Detected
 
-# Verify wandb directory exists
-ls -la ./outputs/wandb/
+```bash
+# Verify NVIDIA Container Toolkit
+nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.1-base nvidia-smi
 ```
 
-**Docker Memory Issues:**
-```bash
-# Check container resource usage
-docker stats mlops-workspace
+---
 
-# Increase memory in docker-compose.yml if needed
-```
+## Security
 
-### Getting Help
-
-- Check existing documentation
-- Review Phase 1 constraints (CPU-only, offline mode)
-- Examine log files in `./outputs/logs/`
+- **Non-root containers**: All containers run as `mlops` user
+- **No hardcoded secrets**: Credentials via environment variables
+- **Rate limiting**: Built into B2 client
+- **Network isolation**: Custom bridge network
 
 ---
 
-## Security Considerations
-
-- **No hardcoded credentials**: All secrets via environment variables
-- **Non-root container user**: Improved container security
-- **Rate limiting**: Built into B2 client to prevent abuse
-- **Encrypted transfers**: Simulated in Phase 1, real AES-256 in Phase 2/3
-- **Adversarial research**: For authorized security research only
-
----
-
-## License
-
-MIT License - See LICENSE file for details.
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Follow existing code patterns
-4. Add tests for new functionality
-5. Submit a pull request
-
----
-
-*Phase 1: Local Core - Built for reproducibility and CPU-only development*
+*Phase 1: Local Core - Multi-container architecture for reproducible MLOps*

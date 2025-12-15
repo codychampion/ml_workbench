@@ -1,0 +1,82 @@
+# =============================================================================
+# MLOps PyTorch GPU Image
+# =============================================================================
+# PHASE 2/3: GPU-enabled image with CUDA support for training and inference.
+# Use with NVIDIA Container Toolkit.
+#
+# Build: docker build -t mlops-torch-gpu:latest -f docker/base/Dockerfile.torch-gpu .
+# =============================================================================
+
+# PHASE 2/3 TODO: Switch to CUDA base when ready
+# FROM nvidia/cuda:12.1-cudnn8-runtime-ubuntu22.04 AS cuda-base
+FROM python:3.11-slim AS mlops-torch-gpu
+
+LABEL maintainer="MLOps Team"
+LABEL description="MLOps PyTorch GPU image for Phase 2/3"
+LABEL version="1.0.0"
+LABEL phase="2-3-gpu"
+
+# Prevent Python from writing pyc files and buffering stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+
+WORKDIR /workspace
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    wget \
+    build-essential \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
+    && mkdir -p /workspace /home/mlops/.cache \
+    && chown -R mlops:mlops /workspace /home/mlops
+
+# Upgrade pip
+RUN pip install --upgrade pip setuptools wheel
+
+# Install common utilities
+RUN pip install \
+    python-dotenv>=1.0.0 \
+    requests>=2.31.0 \
+    pyyaml>=6.0.0 \
+    tqdm>=4.66.0
+
+# PHASE 2/3 TODO: Install CUDA-enabled PyTorch
+# For now, install CPU version as placeholder
+RUN pip install \
+    torch>=2.0.0 \
+    torchvision>=0.15.0 \
+    torchaudio>=2.0.0
+
+# Install common ML libraries
+RUN pip install \
+    numpy>=1.24.0 \
+    scipy>=1.11.0 \
+    scikit-learn>=1.3.0 \
+    pandas>=2.0.0 \
+    Pillow>=10.0.0 \
+    wandb>=0.16.0 \
+    b2sdk>=1.24.0
+
+# PHASE 2/3 TODO: GPU environment configuration
+# ENV CUDA_VISIBLE_DEVICES=0
+# ENV TORCH_CUDA_ARCH_LIST="7.0 7.5 8.0 8.6 9.0"
+# ENV NVIDIA_VISIBLE_DEVICES=all
+# ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+ENV COMPUTE_DEVICE=cuda
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/bin/bash"]

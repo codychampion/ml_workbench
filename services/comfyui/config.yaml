@@ -1,0 +1,46 @@
+# ComfyUI Service Configuration
+# ==============================
+# Phase 1: Mock server configuration
+# Phase 2/3: Full ComfyUI configuration
+
+service:
+  name: comfyui
+  version: "1.0.0"
+  phase: "1-local-core"
+
+server:
+  host: "0.0.0.0"
+  port: 8188
+
+paths:
+  output: /workspace/comfyui/output
+  input: /workspace/comfyui/input
+  models: /workspace/comfyui/models
+  custom_nodes: /workspace/comfyui/custom_nodes
+
+# PHASE 2/3 TODO: Model configurations
+# models:
+#   checkpoints:
+#     - name: "flux-1-dev"
+#       path: "checkpoints/flux1-dev.safetensors"
+#       type: "flux"
+#     - name: "sdxl-base"
+#       path: "checkpoints/sdxl_base.safetensors"
+#       type: "sdxl"
+#   loras:
+#     - name: "custom-style-v1"
+#       path: "loras/custom-style.safetensors"
+#   vaes:
+#     - name: "sdxl-vae"
+#       path: "vae/sdxl_vae.safetensors"
+
+# PHASE 2/3 TODO: GPU settings
+# gpu:
+#   device: "cuda:0"
+#   vram_management: "auto"
+#   precision: "fp16"
+#   attention_mode: "xformers"  # or "sdp"
+
+logging:
+  level: INFO
+  format: "[%(asctime)s] %(levelname)s - %(message)s"

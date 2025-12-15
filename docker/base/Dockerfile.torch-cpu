@@ -1,0 +1,49 @@
+# =============================================================================
+# MLOps PyTorch CPU Image
+# =============================================================================
+# Extends base image with PyTorch (CPU-only) for Phase 1 development.
+# No CUDA dependencies - optimized for local/CI environments.
+#
+# Build: docker build -t mlops-torch-cpu:latest -f docker/base/Dockerfile.torch-cpu .
+# =============================================================================
+
+ARG BASE_IMAGE=mlops-base:latest
+FROM ${BASE_IMAGE}
+
+LABEL maintainer="MLOps Team"
+LABEL description="MLOps PyTorch CPU image for Phase 1 development"
+LABEL version="1.0.0"
+LABEL phase="1-local-core"
+
+# Install PyTorch CPU-only
+RUN pip install \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch>=2.0.0 \
+    torchvision>=0.15.0 \
+    torchaudio>=2.0.0
+
+# Install common ML libraries
+RUN pip install \
+    numpy>=1.24.0 \
+    scipy>=1.11.0 \
+    scikit-learn>=1.3.0 \
+    pandas>=2.0.0 \
+    Pillow>=10.0.0
+
+# Install experiment tracking
+RUN pip install \
+    wandb>=0.16.0
+
+# Install cloud storage SDK
+RUN pip install \
+    b2sdk>=1.24.0
+
+# Set CPU-specific environment
+ENV COMPUTE_DEVICE=cpu
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+
+# Verify installation
+RUN python -c "import torch; print(f'PyTorch {torch.__version__} (CPU)')"
+
+CMD ["/bin/bash"]
