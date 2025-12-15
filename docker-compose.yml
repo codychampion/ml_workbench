@@ -193,6 +193,28 @@ services:
           cpus: '4'
           memory: 8G
 
+  # Data Collector - Reddit scraping + auto-captioning
+  data-collector:
+    build:
+      context: .
+      dockerfile: projects/data-collector/Dockerfile
+    image: mlops-data-collector:latest
+    volumes:
+      - .:/workspace:cached
+      - ./data/collected:/workspace/data/collected
+      - fiftyone-data:/workspace/data/fiftyone
+    environment:
+      - COMPUTE_DEVICE=cpu
+    networks:
+      - mlops-network
+    profiles:
+      - workers
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
   # ---------------------------------------------------------------------------
   # DEV SHELL - use: docker-compose --profile dev up -d dev
   # ---------------------------------------------------------------------------
