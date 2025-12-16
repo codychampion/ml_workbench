@@ -11,6 +11,12 @@ import sys
 import time
 from pathlib import Path
 
+# Configure FiftyOne to use external MongoDB before importing
+database_uri = os.getenv("FIFTYONE_DATABASE_URI")
+if database_uri:
+    os.environ["FIFTYONE_DATABASE_URI"] = database_uri
+    print(f"[FiftyOne] Using external MongoDB: {database_uri.split('@')[-1] if '@' in database_uri else database_uri}")
+
 import fiftyone as fo
 import fiftyone.zoo as foz
 
@@ -19,7 +25,7 @@ class FiftyOneConfig:
     """FiftyOne server configuration."""
     ADDRESS = os.getenv("FIFTYONE_APP_ADDRESS", "0.0.0.0")
     PORT = int(os.getenv("FIFTYONE_APP_PORT", "5151"))
-    DATABASE_DIR = Path(os.getenv("FIFTYONE_DATABASE_DIR", "/workspace/fiftyone/database"))
+    DATABASE_URI = os.getenv("FIFTYONE_DATABASE_URI")
     DATASET_DIR = Path(os.getenv("FIFTYONE_DEFAULT_DATASET_DIR", "/workspace/fiftyone/datasets"))
     AUTO_LOAD_QUICKSTART = os.getenv("FIFTYONE_AUTO_LOAD_QUICKSTART", "true").lower() == "true"
 
@@ -72,12 +78,13 @@ def main():
     print("=" * 60)
     print(f"Address: {FiftyOneConfig.ADDRESS}")
     print(f"Port: {FiftyOneConfig.PORT}")
-    print(f"Database: {FiftyOneConfig.DATABASE_DIR}")
+    if FiftyOneConfig.DATABASE_URI:
+        db_display = FiftyOneConfig.DATABASE_URI.split('@')[-1] if '@' in FiftyOneConfig.DATABASE_URI else FiftyOneConfig.DATABASE_URI
+        print(f"Database: {db_display}")
     print(f"Datasets: {FiftyOneConfig.DATASET_DIR}")
     print("=" * 60)
 
     # Ensure directories exist
-    FiftyOneConfig.DATABASE_DIR.mkdir(parents=True, exist_ok=True)
     FiftyOneConfig.DATASET_DIR.mkdir(parents=True, exist_ok=True)
 
     # Load or create sample dataset

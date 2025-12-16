@@ -34,9 +34,9 @@ COPY --chown=mlops:mlops services/fiftyone/config.yaml /workspace/fiftyone/
 USER mlops
 WORKDIR /workspace/fiftyone
 
-ENV FIFTYONE_DATABASE_DIR=/workspace/fiftyone/database
 ENV FIFTYONE_APP_ADDRESS=0.0.0.0
 ENV FIFTYONE_APP_PORT=5151
+# Database URI is set via docker-compose environment
 
 EXPOSE 5151
 
