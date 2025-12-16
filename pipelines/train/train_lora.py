@@ -22,6 +22,22 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+# Prefect for workflow orchestration
+try:
+    from prefect import flow, task
+    PREFECT_AVAILABLE = True
+except ImportError:
+    PREFECT_AVAILABLE = False
+    # Provide no-op decorators when Prefect is not available
+    def flow(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not args or callable(args[0]) else decorator
+    def task(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not args or callable(args[0]) else decorator
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -117,6 +133,7 @@ class SymbolicDataset(torch.utils.data.Dataset):
         return self.data[idx], self.targets[idx]
 
 
+@task(name="init-aim-tracking")
 def init_aim(config: Dict[str, Any], run_name: Optional[str] = None) -> Optional[Run]:
     """Initialize AIM for experiment tracking."""
     if not AIM_AVAILABLE:
@@ -147,6 +164,7 @@ def init_aim(config: Dict[str, Any], run_name: Optional[str] = None) -> Optional
     return run
 
 
+@task(name="train-epoch")
 def train_epoch(
     model: nn.Module,
     dataloader: torch.utils.data.DataLoader,
@@ -176,6 +194,7 @@ def train_epoch(
     return total_loss / len(dataloader)
 
 
+@flow(name="lora-training-pipeline", log_prints=True)
 def run_training_pipeline(
     output_dir: Path,
     num_epochs: int = 10,

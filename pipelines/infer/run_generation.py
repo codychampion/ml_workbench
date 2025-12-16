@@ -28,6 +28,22 @@ import numpy as np
 from PIL import Image
 import torch
 
+# Prefect for workflow orchestration
+try:
+    from prefect import flow, task
+    PREFECT_AVAILABLE = True
+except ImportError:
+    PREFECT_AVAILABLE = False
+    # Provide no-op decorators when Prefect is not available
+    def flow(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not args or callable(args[0]) else decorator
+    def task(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not args or callable(args[0]) else decorator
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -108,6 +124,7 @@ class SymbolicImageGenerator:
         return image
 
 
+@task(name="init-aim-tracking")
 def init_aim(config: Dict[str, Any], run_name: Optional[str] = None) -> Optional[Run]:
     """
     Initialize AIM for experiment tracking.
@@ -140,6 +157,7 @@ def init_aim(config: Dict[str, Any], run_name: Optional[str] = None) -> Optional
     return run
 
 
+@flow(name="flux-generation-pipeline", log_prints=True)
 def run_generation_pipeline(
     prompts: list[str],
     output_dir: Path,

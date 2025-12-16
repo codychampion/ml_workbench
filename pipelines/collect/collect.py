@@ -20,9 +20,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+# Prefect for workflow orchestration
+try:
+    from prefect import flow, task
+    PREFECT_AVAILABLE = True
+except ImportError:
+    PREFECT_AVAILABLE = False
+    # Provide no-op decorators when Prefect is not available
+    def flow(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not args or callable(args[0]) else decorator
+    def task(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator if not args or callable(args[0]) else decorator
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config import get_config
+
+
+@task(name="collect-subreddit", retries=2, retry_delay_seconds=30)
+def collect_subreddit_task(collector, subreddit: str, limit: int, sort: str, time_range: str, media_types: list = None):
+    """Prefect task wrapper for subreddit collection."""
+    return collector.collect_subreddit(subreddit, limit, sort, time_range, media_types)
 
 
 class DataCollector:
@@ -303,6 +325,32 @@ def main():
     print("\nNext steps:")
     print("  1. Caption images: python -m pipelines.annotate.caption")
     print("  2. View in FiftyOne: python -m pipelines.annotate.create_dataset")
+
+
+@flow(name="data-collection-pipeline", log_prints=True)
+def run_collection_flow(
+    subreddits: list[str],
+    output_dir: Path,
+    limit: int = 100,
+    sort: str = "hot",
+    time_range: str = "all",
+    images_only: bool = False
+) -> list:
+    """
+    Prefect flow for data collection.
+
+    Run with: prefect deployment run 'data-collection-pipeline/default'
+    """
+    collector = DataCollector(output_dir=output_dir)
+    media_types = ["jpg", "jpeg", "png", "gif", "webp"] if images_only else None
+
+    all_files = []
+    for sub in subreddits:
+        files = collect_subreddit_task(collector, sub, limit, sort, time_range, media_types)
+        all_files.extend(files)
+
+    collector.save_metadata()
+    return all_files
 
 
 if __name__ == "__main__":

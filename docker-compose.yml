@@ -12,6 +12,7 @@
 # Infrastructure Services:
 #   - MinIO       - S3-compatible object storage (mimics B2/AWS locally)
 #   - AIM         - Experiment tracking (replaces W&B)
+#   - Prefect     - Workflow orchestration (DAG pipelines)
 #   - JuiceFS     - Distributed storage (Redis-backed)
 #   - Label Studio - Image/text labeling
 #   - CVAT        - Video annotation
@@ -38,6 +39,7 @@
 # Web UIs:
 #   - MinIO Console: http://localhost:9001
 #   - AIM:           http://localhost:43800
+#   - Prefect:       http://localhost:4200
 #   - Label Studio:  http://localhost:8081
 #   - CVAT:          http://localhost:8082
 #   - Spotlight:     http://localhost:8083
@@ -462,6 +464,38 @@ services:
           memory: 256M
 
   # ===========================================================================
+  # WORKFLOW ORCHESTRATION - Prefect
+  # ===========================================================================
+  # Self-hosted Prefect server for pipeline orchestration.
+  # UI: http://localhost:4200
+
+  prefect-server:
+    image: prefecthq/prefect:2-python3.11
+    container_name: mlops-prefect
+    restart: unless-stopped
+    ports:
+      - "4200:4200"
+    volumes:
+      - prefect-data:/root/.prefect
+    environment:
+      - PREFECT_SERVER_API_HOST=0.0.0.0
+      - PREFECT_API_URL=http://prefect-server:4200/api
+    command: prefect server start
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ===========================================================================
   # LLM API GATEWAY - LiteLLM
   # ===========================================================================
 
@@ -865,6 +899,7 @@ volumes:
   cvat-data:
   cvat-share:
   vault-data:
+  prefect-data:
   fiftyone-data:
   comfyui-models:
   comfyui-output:

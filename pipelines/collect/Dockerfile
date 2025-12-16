@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir \
     yt-dlp \
     boto3 \
     hvac \
+    prefect>=2.14.0 \
     "dvc[all]>=3.0.0" \
     Pillow requests tqdm \
     python-dotenv pyyaml
@@ -44,5 +45,6 @@ COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
 USER mlops
 
 ENV GALLERY_DL_CONFIG=/workspace/pipelines/collect/gallery-dl.conf
+ENV PREFECT_API_URL=http://prefect-server:4200/api
 
 CMD ["python", "-m", "pipelines.collect.collect", "--help"]
