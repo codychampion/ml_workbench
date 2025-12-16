@@ -1,110 +1,171 @@
 # =============================================================================
-# DVC Pipeline Definitions
+# DVC Pipeline - MLOps Workbench
 # =============================================================================
-# Run pipelines with: dvc repro
-# Track data with: dvc add <file>
-# Push data with: dvc push (after configuring remote)
 #
-# Containers:
-#   - data-collector: Lightweight scraping (no ML dependencies)
-#   - captioner: Image captioning + fine-tuning (ML-heavy)
+# Pipeline Stages:
+#   1. collect   -> data/collected/
+#   2. annotate  -> data/annotated/
+#   3. train     -> models/
+#   4. evaluate  -> outputs/metrics/
+#   5. infer     -> outputs/
+#
+# Run: dvc repro <stage>
 # =============================================================================
 
 stages:
-  # ---------------------------------------------------------------------------
-  # Stage 1: Data Collection (data-collector container)
-  # ---------------------------------------------------------------------------
-  collect-data:
+
+  # ===========================================================================
+  # STAGE 1: Data Collection
+  # ===========================================================================
+  collect:
     cmd: >
-      python projects/data-collector/collect.py
+      python -m pipelines.collect.collect
       --subreddit ${collect.subreddit}
       --limit ${collect.limit}
       --sort ${collect.sort}
       --time ${collect.time}
       --output-dir data/collected/${collect.subreddit}
     params:
-      - collect.subreddit
-      - collect.limit
-      - collect.sort
-      - collect.time
+      - collect
     outs:
       - data/collected/${collect.subreddit}:
           cache: true
           persist: true
 
-  # ---------------------------------------------------------------------------
-  # Stage 2: Auto-Captioning (captioner container)
-  # ---------------------------------------------------------------------------
-  caption-images:
+  # ===========================================================================
+  # STAGE 2: Data Annotation (Auto-Captioning)
+  # ===========================================================================
+  annotate:
     cmd: >
-      python projects/captioner/caption.py
+      python -m pipelines.annotate.caption
       --input-dir data/collected/${collect.subreddit}
-      --model ${caption.model}
-      --output-format ${caption.output_format}
+      --model ${annotate.model}
+      --output-format ${annotate.output_format}
       --recursive
     deps:
       - data/collected/${collect.subreddit}
-      - projects/captioner/caption.py
-      - projects/captioner/models.py
+      - pipelines/annotate/caption.py
     params:
-      - caption.model
-      - caption.output_format
+      - annotate
 
-  # ---------------------------------------------------------------------------
-  # Stage 3: Create FiftyOne Dataset (captioner container)
-  # ---------------------------------------------------------------------------
-  create-dataset:
+  annotate-custom:
     cmd: >
-      python projects/captioner/create_dataset.py
+      python -m pipelines.annotate.caption
       --input-dir data/collected/${collect.subreddit}
-      --name ${dataset.name}
-    deps:
-      - data/collected/${collect.subreddit}
-      - projects/captioner/create_dataset.py
-    params:
-      - dataset.name
-
-  # ---------------------------------------------------------------------------
-  # Stage 4: Fine-tune Captioner (captioner container) - Optional
-  # ---------------------------------------------------------------------------
-  finetune-captioner:
-    cmd: >
-      python projects/captioner/finetune.py
-      --dataset data/annotated
-      --model ${finetune.base_model}
-      --output models/captioner/${finetune.output_name}
-      --epochs ${finetune.epochs}
-      --batch-size ${finetune.batch_size}
-      --learning-rate ${finetune.learning_rate}
-      --lora-rank ${finetune.lora_rank}
-    deps:
-      - data/annotated
-      - projects/captioner/finetune.py
-      - projects/captioner/models.py
-    params:
-      - finetune.base_model
-      - finetune.output_name
-      - finetune.epochs
-      - finetune.batch_size
-      - finetune.learning_rate
-      - finetune.lora_rank
-    outs:
-      - models/captioner/${finetune.output_name}:
-          cache: true
-
-  # ---------------------------------------------------------------------------
-  # Stage 5: Re-caption with Fine-tuned Model (captioner container)
-  # ---------------------------------------------------------------------------
-  recaption-with-finetuned:
-    cmd: >
-      python projects/captioner/caption.py
-      --input-dir data/collected/${collect.subreddit}
-      --model models/captioner/${finetune.output_name}
+      --model models/captioner/${train.captioner.output_name}
       --output-format txt
       --recursive
     deps:
       - data/collected/${collect.subreddit}
-      - models/captioner/${finetune.output_name}
-      - projects/captioner/caption.py
+      - models/captioner/${train.captioner.output_name}
+      - pipelines/annotate/caption.py
+
+  create-dataset:
+    cmd: >
+      python -m pipelines.annotate.create_dataset
+      --input-dir data/collected/${collect.subreddit}
+      --name ${dataset.name}
+    deps:
+      - data/collected/${collect.subreddit}
+      - pipelines/annotate/create_dataset.py
     params:
-      - finetune.output_name
+      - dataset.name
+
+  # ===========================================================================
+  # STAGE 3: Model Training
+  # ===========================================================================
+  train-captioner:
+    cmd: >
+      python -m pipelines.train.finetune
+      --dataset data/annotated
+      --model ${train.captioner.base_model}
+      --output models/captioner/${train.captioner.output_name}
+      --epochs ${train.captioner.epochs}
+      --batch-size ${train.captioner.batch_size}
+      --learning-rate ${train.captioner.learning_rate}
+      --lora-rank ${train.captioner.lora_rank}
+    deps:
+      - data/annotated
+      - pipelines/train/finetune.py
+    params:
+      - train.captioner
+    outs:
+      - models/captioner/${train.captioner.output_name}:
+          cache: true
+
+  train-lora:
+    cmd: >
+      python -m pipelines.train.train_lora
+      --dataset data/annotated
+      --base-model ${train.lora.base_model}
+      --output models/lora/${train.lora.output_name}
+      --epochs ${train.lora.epochs}
+      --batch-size ${train.lora.batch_size}
+      --learning-rate ${train.lora.learning_rate}
+      --rank ${train.lora.rank}
+    deps:
+      - data/annotated
+      - pipelines/train/train_lora.py
+    params:
+      - train.lora
+    outs:
+      - models/lora/${train.lora.output_name}:
+          cache: true
+
+  # ===========================================================================
+  # STAGE 4: Model Evaluation
+  # ===========================================================================
+  benchmark-captioner:
+    cmd: >
+      python -m pipelines.evaluate.benchmark
+      --model ${evaluate.captioner.model}
+      --benchmark captioning
+      --output outputs/benchmarks
+      --num-runs ${evaluate.captioner.num_runs}
+    deps:
+      - pipelines/evaluate/benchmark.py
+    params:
+      - evaluate.captioner
+    outs:
+      - outputs/benchmarks:
+          cache: false
+          persist: true
+
+  evaluate-metrics:
+    cmd: >
+      python -m pipelines.evaluate.metrics
+      --predictions outputs/predictions.json
+      --references data/test/references.json
+      --task ${evaluate.task}
+      --output outputs/metrics
+      --model-name ${evaluate.model_name}
+    deps:
+      - outputs/predictions.json
+      - data/test/references.json
+      - pipelines/evaluate/metrics.py
+    params:
+      - evaluate.task
+      - evaluate.model_name
+    outs:
+      - outputs/metrics:
+          cache: false
+          persist: true
+
+  # ===========================================================================
+  # STAGE 5: Model Inference
+  # ===========================================================================
+  generate:
+    cmd: >
+      python -m pipelines.infer.run_generation
+      --model ${infer.model}
+      --lora ${infer.lora_path}
+      --prompt "${infer.prompt}"
+      --output outputs/generations
+    deps:
+      - pipelines/infer/run_generation.py
+    params:
+      - infer
+    outs:
+      - outputs/generations:
+          cache: false
+          persist: true

@@ -1,14 +1,21 @@
 # =============================================================================
-# MLOps Workspace - Multi-Container Architecture
+# MLOps Workbench - Pipeline-Based Architecture
 # =============================================================================
-# Phase 1: Local development environment (CPU-only)
+#
+# Pipeline Stages:
+#   1. collect   - Data gathering (Reddit, gallery-dl)
+#   2. annotate  - Auto-captioning & labeling
+#   3. train     - Model fine-tuning (LoRA, captioners)
+#   4. evaluate  - Benchmarks & metrics
+#   5. infer     - Model inference & generation
 #
 # Usage:
-#   docker-compose build                    # Build all images
-#   docker-compose up -d                    # Start services
-#   docker-compose run --rm flux-gen        # Run a worker job
-#   docker-compose --profile dev up -d      # Start dev shell
-#   docker-compose down                     # Stop all
+#   docker-compose up -d                           # Start services
+#   docker-compose run --rm collect <cmd>          # Run collection
+#   docker-compose run --rm annotate <cmd>         # Run annotation
+#   docker-compose run --rm train <cmd>            # Run training
+#   docker-compose run --rm evaluate <cmd>         # Run evaluation
+#   docker-compose run --rm infer <cmd>            # Run inference
 #
 # =============================================================================
 
@@ -16,11 +23,10 @@ version: '3.8'
 
 services:
 
-  # ---------------------------------------------------------------------------
-  # SERVICES (long-running)
-  # ---------------------------------------------------------------------------
+  # ===========================================================================
+  # INFRASTRUCTURE SERVICES (always running)
+  # ===========================================================================
 
-  # MongoDB for FiftyOne
   mongodb:
     image: mongo:7.0
     container_name: mlops-mongodb
@@ -43,77 +49,9 @@ services:
           cpus: '1'
           memory: 1G
 
-  comfyui:
-    build:
-      context: .
-      dockerfile: services/comfyui/Dockerfile
-    image: mlops-comfyui:latest
-    container_name: mlops-comfyui
-    restart: unless-stopped
-    ports:
-      - "8188:8188"
-    volumes:
-      - ./services/comfyui:/workspace/comfyui/config:ro
-      - comfyui-models:/workspace/comfyui/models
-      - comfyui-output:/workspace/comfyui/output
-      - comfyui-input:/workspace/comfyui/input
-    environment:
-      - COMFYUI_HOST=0.0.0.0
-      - COMFYUI_PORT=8188
-      - COMPUTE_DEVICE=cpu
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8188/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-
-  fiftyone:
-    build:
-      context: .
-      dockerfile: services/fiftyone/Dockerfile
-    image: mlops-fiftyone:latest
-    container_name: mlops-fiftyone
-    restart: unless-stopped
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    ports:
-      - "5151:5151"
-    volumes:
-      - ./services/fiftyone:/workspace/fiftyone/config:ro
-      - fiftyone-data:/workspace/fiftyone/datasets
-      - ./data:/workspace/data:ro
-    environment:
-      - FIFTYONE_APP_ADDRESS=0.0.0.0
-      - FIFTYONE_APP_PORT=5151
-      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      - FIFTYONE_AUTO_LOAD_QUICKSTART=true
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5151"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-
-  # Self-hosted W&B Server
   wandb-server:
     image: wandb/local:latest
-    container_name: mlops-wandb-server
+    container_name: mlops-wandb
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -136,7 +74,6 @@ services:
           cpus: '2'
           memory: 4G
 
-  # Label Studio - Data labeling platform
   label-studio:
     image: heartexlabs/label-studio:latest
     container_name: mlops-label-studio
@@ -163,122 +100,109 @@ services:
           cpus: '2'
           memory: 2G
 
-  # ---------------------------------------------------------------------------
-  # WORKERS (job executors) - use: docker-compose run --rm <worker>
-  # ---------------------------------------------------------------------------
-
-  flux-gen:
+  fiftyone:
     build:
       context: .
-      dockerfile: projects/flux-comfyui-generation/Dockerfile
-    image: mlops-flux-gen:latest
+      dockerfile: services/fiftyone/Dockerfile
+    image: mlops-fiftyone:latest
+    container_name: mlops-fiftyone
+    restart: unless-stopped
     depends_on:
-      - wandb-server
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "5151:5151"
     volumes:
-      - .:/workspace:cached
-      - flux-output:/workspace/outputs/flux-generations
+      - fiftyone-data:/workspace/fiftyone/datasets
+      - ./data:/workspace/data:ro
     environment:
-      - WANDB_BASE_URL=http://wandb-server:8080
-      - WANDB_PROJECT=flux-comfyui-generation
-      - COMPUTE_DEVICE=cpu
-      - B2_LOCAL_MANIFEST=/workspace/.b2_local_manifest.json
-    networks:
-      - mlops-network
-    profiles:
-      - workers
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-
-  adv-patches:
-    build:
-      context: .
-      dockerfile: projects/adversarial-patches/Dockerfile
-    image: mlops-adv-patches:latest
-    depends_on:
-      - wandb-server
-      - mongodb
-    volumes:
-      - .:/workspace:cached
-      - adv-output:/workspace/outputs/adversarial-patches
-      - fiftyone-data:/workspace/data/fiftyone
-    environment:
-      - WANDB_BASE_URL=http://wandb-server:8080
-      - WANDB_PROJECT=adversarial-patches
+      - FIFTYONE_APP_ADDRESS=0.0.0.0
+      - FIFTYONE_APP_PORT=5151
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      - COMPUTE_DEVICE=cpu
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5151"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     networks:
       - mlops-network
-    profiles:
-      - workers
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 4G
 
-  lora-trainer:
+  comfyui:
     build:
       context: .
-      dockerfile: projects/lora-trainer/Dockerfile
-    image: mlops-lora-trainer:latest
-    depends_on:
-      - wandb-server
+      dockerfile: services/comfyui/Dockerfile
+    image: mlops-comfyui:latest
+    container_name: mlops-comfyui
+    restart: unless-stopped
+    ports:
+      - "8188:8188"
     volumes:
-      - .:/workspace:cached
-      - lora-checkpoints:/workspace/outputs/lora-checkpoints
-      - lora-data:/workspace/data/lora-training
+      - comfyui-models:/workspace/comfyui/models
+      - comfyui-output:/workspace/comfyui/output
+      - ./models:/workspace/models:ro
     environment:
-      - WANDB_BASE_URL=http://wandb-server:8080
-      - WANDB_PROJECT=lora-trainer
+      - COMFYUI_HOST=0.0.0.0
+      - COMFYUI_PORT=8188
       - COMPUTE_DEVICE=cpu
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8188/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
     networks:
       - mlops-network
-    profiles:
-      - workers
     deploy:
       resources:
         limits:
-          cpus: '4'
-          memory: 8G
+          cpus: '2'
+          memory: 4G
 
-  # Data Collector - Reddit/gallery-dl scraping (lightweight)
-  data-collector:
+  # ===========================================================================
+  # PIPELINE STAGES (run with: docker-compose run --rm <stage> <command>)
+  # ===========================================================================
+
+  # Stage 1: Data Collection (lightweight, no ML deps)
+  collect:
     build:
       context: .
-      dockerfile: projects/data-collector/Dockerfile
-    image: mlops-data-collector:latest
+      dockerfile: pipelines/collect/Dockerfile
+    image: mlops-collect:latest
     volumes:
       - .:/workspace:cached
+      - ./data/raw:/workspace/data/raw
       - ./data/collected:/workspace/data/collected
     environment:
       - COMPUTE_DEVICE=cpu
     networks:
       - mlops-network
     profiles:
-      - workers
+      - pipeline
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 2G
 
-  # Captioner - Image captioning + fine-tuning (ML-heavy)
-  captioner:
+  # Stage 2: Data Annotation (auto-captioning, uses trained models)
+  annotate:
     build:
       context: .
-      dockerfile: projects/captioner/Dockerfile
-    image: mlops-captioner:latest
+      dockerfile: pipelines/annotate/Dockerfile
+    image: mlops-annotate:latest
     depends_on:
       - mongodb
     volumes:
       - .:/workspace:cached
-      - ./data/collected:/workspace/data/collected
-      - ./data/annotated:/workspace/data/annotated
-      - ./models/captioner:/workspace/models/captioner
-      - fiftyone-data:/workspace/data/fiftyone
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
     environment:
       - COMPUTE_DEVICE=cpu
@@ -287,16 +211,106 @@ services:
     networks:
       - mlops-network
     profiles:
-      - workers
+      - pipeline
     deploy:
       resources:
         limits:
           cpus: '4'
           memory: 8G
 
-  # ---------------------------------------------------------------------------
-  # DEV SHELL - use: docker-compose --profile dev up -d dev
-  # ---------------------------------------------------------------------------
+  # Stage 3: Model Training (fine-tuning, LoRA)
+  train:
+    build:
+      context: .
+      dockerfile: pipelines/train/Dockerfile
+    image: mlops-train:latest
+    depends_on:
+      - wandb-server
+    volumes:
+      - .:/workspace:cached
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./outputs:/workspace/outputs
+      - huggingface-cache:/workspace/.cache/huggingface
+    environment:
+      - COMPUTE_DEVICE=cpu
+      - WANDB_BASE_URL=http://wandb-server:8080
+      - HF_HOME=/workspace/.cache/huggingface
+    networks:
+      - mlops-network
+    profiles:
+      - pipeline
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 12G
+
+  # Stage 4: Model Evaluation (benchmarks, metrics)
+  evaluate:
+    build:
+      context: .
+      dockerfile: pipelines/evaluate/Dockerfile
+    image: mlops-evaluate:latest
+    depends_on:
+      - wandb-server
+      - mongodb
+    volumes:
+      - .:/workspace:cached
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./outputs:/workspace/outputs
+      - fiftyone-data:/workspace/fiftyone
+      - huggingface-cache:/workspace/.cache/huggingface
+    environment:
+      - COMPUTE_DEVICE=cpu
+      - WANDB_BASE_URL=http://wandb-server:8080
+      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
+      - HF_HOME=/workspace/.cache/huggingface
+    networks:
+      - mlops-network
+    profiles:
+      - pipeline
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  # Stage 5: Model Inference (generation, prediction)
+  infer:
+    build:
+      context: .
+      dockerfile: pipelines/infer/Dockerfile
+    image: mlops-infer:latest
+    depends_on:
+      - wandb-server
+      - mongodb
+    volumes:
+      - .:/workspace:cached
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - ./outputs:/workspace/outputs
+      - fiftyone-data:/workspace/fiftyone
+      - huggingface-cache:/workspace/.cache/huggingface
+    environment:
+      - COMPUTE_DEVICE=cpu
+      - WANDB_BASE_URL=http://wandb-server:8080
+      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
+      - HF_HOME=/workspace/.cache/huggingface
+    networks:
+      - mlops-network
+    profiles:
+      - pipeline
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+
+  # ===========================================================================
+  # DEV SHELL (interactive development)
+  # ===========================================================================
 
   dev:
     build:
@@ -309,12 +323,16 @@ services:
       - mongodb
     volumes:
       - .:/workspace:cached
-      - fiftyone-data:/workspace/data/fiftyone
+      - ./data:/workspace/data
+      - ./models:/workspace/models
+      - fiftyone-data:/workspace/fiftyone
+      - huggingface-cache:/workspace/.cache/huggingface
     environment:
       - MLOPS_ENV=development
       - DEBUG=true
       - WANDB_BASE_URL=http://wandb-server:8080
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
+      - HF_HOME=/workspace/.cache/huggingface
       - COMPUTE_DEVICE=cpu
     ports:
       - "8888:8888"
@@ -331,33 +349,17 @@ services:
           memory: 8G
 
 # =============================================================================
-# PHASE 2/3 TODO: Orchestration
-# =============================================================================
-#
-#   prefect-server:
-#     image: prefecthq/prefect:2-python3.11
-#     ports:
-#       - "4200:4200"
-#     profiles:
-#       - orchestration
-
-# =============================================================================
 # VOLUMES
 # =============================================================================
 
 volumes:
   mongodb-data:
-  comfyui-models:
-  comfyui-output:
-  comfyui-input:
-  fiftyone-data:
   wandb-data:
   label-studio-data:
+  fiftyone-data:
+  comfyui-models:
+  comfyui-output:
   huggingface-cache:
-  flux-output:
-  adv-output:
-  lora-checkpoints:
-  lora-data:
 
 # =============================================================================
 # NETWORKS

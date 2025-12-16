@@ -1,43 +1,54 @@
 # =============================================================================
-# LoRA Trainer Worker
+# Pipeline Stage 3: Model Training
+# =============================================================================
+# Fine-tuning captioners, LoRA adapters, and other models.
+#
+# Usage:
+#   docker-compose run --rm train python -m pipelines.train.finetune --help
+#   docker-compose run --rm train python -m pipelines.train.train_lora --help
 # =============================================================================
 FROM python:3.13-slim
 
 LABEL maintainer="MLOps Team"
-LABEL project="lora-trainer"
+LABEL pipeline.stage="3-train"
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /workspace
 
-# System dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Create user
 RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
     && mkdir -p /workspace && chown -R mlops:mlops /workspace
 
-# Python dependencies
+# Full ML stack for training
 RUN pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     torch torchvision \
-    wandb Pillow numpy b2sdk python-dotenv datasets
+    transformers>=4.36.0 \
+    accelerate \
+    peft>=0.7.0 \
+    datasets>=2.16.0 \
+    wandb \
+    "dvc[all]>=3.0.0" \
+    Pillow numpy tqdm requests \
+    python-dotenv pyyaml \
+    sentencepiece bitsandbytes
 
-# Create directories
-RUN mkdir -p /workspace/outputs/lora-checkpoints /workspace/data \
+RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs \
     && chown -R mlops:mlops /workspace
 
-# Copy project files
 COPY --chown=mlops:mlops config.py /workspace/
 COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
-COPY --chown=mlops:mlops projects/lora-trainer/ /workspace/projects/lora-trainer/
+COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
 
 USER mlops
 
+ENV HF_HOME=/workspace/.cache/huggingface
 ENV WANDB_MODE=offline
 ENV COMPUTE_DEVICE=cpu
 
-CMD ["python", "projects/lora-trainer/train_lora.py"]
+CMD ["python", "-m", "pipelines.train.finetune", "--help"]
