@@ -42,6 +42,8 @@ ml_workbench/
 | Category | Technology | Notes |
 |----------|------------|-------|
 | Config | **Hydra** | Hierarchical YAML config with CLI overrides |
+| Workflow Orchestration | **Prefect** | Self-hosted DAG pipelines with UI |
+| Data Versioning | **DVC** | Git for data, tracks datasets/models |
 | Experiment Tracking | **AIM** | Self-hosted, replaces W&B |
 | Object Storage | **MinIO** → B2/S3 | S3-compatible, cloud-portable |
 | Notebooks | **Marimo** | Reactive .py notebooks, NOT Jupyter |
@@ -87,6 +89,33 @@ s3.upload_file(Path("model.pt"), "models/v1/model.pt")
 from data_transfer import S3Client
 client = S3Client()  # Uses S3_* env vars
 ```
+
+### Workflow Orchestration (Prefect)
+```python
+from prefect import flow, task
+
+@task(name="prepare-data", retries=2)
+def prepare_data(config: dict):
+    """Tasks handle individual steps with retry logic."""
+    pass
+
+@flow(name="training-pipeline", log_prints=True)
+def training_flow(config: dict):
+    """Flows orchestrate tasks into DAG pipelines."""
+    data = prepare_data(config)
+    # ... more tasks
+    return result
+
+# Run locally
+training_flow({"epochs": 10})
+
+# Or deploy to Prefect server
+# prefect deployment build ./train.py:training_flow -n "prod"
+# prefect deployment apply training_flow-deployment.yaml
+```
+
+All pipeline scripts (train_lora.py, run_generation.py, collect.py, etc.) are
+decorated with `@flow` and `@task` for Prefect orchestration.
 
 ### Vault Secrets (ALL credentials go here)
 ```python
@@ -154,6 +183,7 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 | ComfyUI | http://localhost:8188 | - |
 | Vault | http://localhost:8200 | Token: mlops-dev-token |
 | LiteLLM | http://localhost:4000 | - |
+| Prefect | http://localhost:4200 | - |
 
 ## File Naming Conventions
 
@@ -170,6 +200,8 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 4. **S3Client over B2Client** - B2Client is legacy
 5. **Hydra for all config** - Don't use config.py for new code
 6. **SiYuan for notes** - Use for papers, experiment notes, knowledge base
+7. **DVC for data versioning** - Use `dvc.yaml` and `params.yaml` for data pipelines
+8. **Prefect for orchestration** - All pipelines have `@flow` decorators
 
 ## Quick Debugging
 

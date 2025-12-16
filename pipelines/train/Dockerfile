@@ -33,6 +33,7 @@ RUN pip install --no-cache-dir \
     peft>=0.7.0 \
     datasets>=2.16.0 \
     aim \
+    prefect>=2.14.0 \
     hydra-core>=1.3.0 \
     omegaconf>=2.3.0 \
     boto3 \
@@ -56,5 +57,6 @@ USER mlops
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV AIM_REPO=/workspace/outputs/aim
 ENV COMPUTE_DEVICE=cpu
+ENV PREFECT_API_URL=http://prefect-server:4200/api
 
 CMD ["python", "-m", "pipelines.train.finetune", "--help"]

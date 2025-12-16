@@ -40,6 +40,7 @@ RUN pip install --no-cache-dir \
     seaborn \
     pandas \
     aim \
+    prefect>=2.14.0 \
     hydra-core>=1.3.0 \
     omegaconf>=2.3.0 \
     boto3 \
@@ -62,5 +63,6 @@ USER mlops
 
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV AIM_REPO=/workspace/outputs/aim
+ENV PREFECT_API_URL=http://prefect-server:4200/api
 
 CMD ["python", "-m", "pipelines.evaluate.benchmark", "--help"]
