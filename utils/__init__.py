@@ -7,6 +7,15 @@ from .storage import (
     download_model,
     sync_dataset,
 )
+from .vault import (
+    VaultClient,
+    get_secret,
+    get_secret_value,
+    get_s3_credentials,
+    get_api_key,
+    get_database_url,
+    init_vault_secrets,
+)
 
 __all__ = [
     # AIM integration
@@ -18,4 +27,12 @@ __all__ = [
     "upload_model",
     "download_model",
     "sync_dataset",
+    # Vault secrets
+    "VaultClient",
+    "get_secret",
+    "get_secret_value",
+    "get_s3_credentials",
+    "get_api_key",
+    "get_database_url",
+    "init_vault_secrets",
 ]
