@@ -9,6 +9,16 @@
 #   4. evaluate  - Benchmarks & metrics
 #   5. infer     - Model inference & generation
 #
+# Infrastructure Services:
+#   - AIM         - Experiment tracking (replaces W&B)
+#   - JuiceFS     - Distributed storage (Redis-backed)
+#   - Label Studio - Image/text labeling
+#   - CVAT        - Video annotation
+#   - Renumics Spotlight - Data exploration
+#   - HashiCorp Vault - Secrets management
+#   - LiteLLM     - LLM API gateway
+#   - FiftyOne    - Dataset visualization
+#
 # Usage:
 #   docker-compose up -d                           # Start services
 #   docker-compose run --rm collect <cmd>          # Run collection
@@ -24,9 +34,10 @@ version: '3.8'
 services:
 
   # ===========================================================================
-  # INFRASTRUCTURE SERVICES (always running)
+  # CORE INFRASTRUCTURE
   # ===========================================================================
 
+  # MongoDB - Database for FiftyOne and metadata
   mongodb:
     image: mongo:7.0
     container_name: mlops-mongodb
@@ -49,30 +60,141 @@ services:
           cpus: '1'
           memory: 1G
 
-  wandb-server:
-    image: wandb/local:latest
-    container_name: mlops-wandb
+  # Redis - Backend for JuiceFS and caching
+  redis:
+    image: redis:7-alpine
+    container_name: mlops-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # PostgreSQL - Backend for CVAT and Vault
+  postgres:
+    image: postgres:15-alpine
+    container_name: mlops-postgres
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+    environment:
+      - POSTGRES_USER=mlops
+      - POSTGRES_PASSWORD=mlops_dev_password
+      - POSTGRES_MULTIPLE_DATABASES=cvat,vault
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlops"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ===========================================================================
+  # EXPERIMENT TRACKING - AIM (replaces W&B)
+  # ===========================================================================
+
+  aim:
+    image: aimstack/aim:latest
+    container_name: mlops-aim
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "43800:43800"  # AIM UI
+      - "53800:53800"  # AIM tracking server
     volumes:
-      - wandb-data:/vol/wandb
+      - aim-data:/aim
+      - ./outputs:/outputs:ro
     environment:
-      - LOCAL_RESTORE=true
-      - GORILLA_ALLOW_USER_REGISTRATION=true
+      - AIM_UI_BASE_PATH=/
+    command: up --host 0.0.0.0 --port 43800
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:43800"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 3
+      start_period: 30s
     networks:
       - mlops-network
     deploy:
       resources:
         limits:
           cpus: '2'
-          memory: 4G
+          memory: 2G
+
+  # ===========================================================================
+  # DISTRIBUTED STORAGE - JuiceFS
+  # ===========================================================================
+
+  juicefs-format:
+    image: juicedata/juicefs:latest
+    container_name: mlops-juicefs-format
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - juicefs-data:/jfs
+    command: >
+      format
+      --storage file
+      --bucket /jfs
+      redis://redis:6379/1
+      mlops-data
+    networks:
+      - mlops-network
+    restart: "no"
+
+  juicefs-mount:
+    image: juicedata/juicefs:latest
+    container_name: mlops-juicefs
+    restart: unless-stopped
+    depends_on:
+      juicefs-format:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    privileged: true
+    volumes:
+      - juicefs-data:/jfs
+      - juicefs-mount:/mnt/jfs:shared
+    command: >
+      mount
+      --background=false
+      --cache-dir=/jfs/cache
+      --cache-size=10240
+      redis://redis:6379/1
+      /mnt/jfs
+    healthcheck:
+      test: ["CMD", "ls", "/mnt/jfs"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ===========================================================================
+  # DATA LABELING - Label Studio (Images/Text)
+  # ===========================================================================
 
   label-studio:
     image: heartexlabs/label-studio:latest
@@ -83,6 +205,7 @@ services:
     volumes:
       - label-studio-data:/label-studio/data
       - ./data:/label-studio/files:ro
+      - juicefs-mount:/label-studio/jfs:ro
     environment:
       - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
       - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files
@@ -100,6 +223,214 @@ services:
           cpus: '2'
           memory: 2G
 
+  # ===========================================================================
+  # VIDEO ANNOTATION - CVAT (Computer Vision Annotation Tool)
+  # ===========================================================================
+
+  cvat-server:
+    image: cvat/server:v2.9.1
+    container_name: mlops-cvat-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - cvat-data:/home/django/data
+      - cvat-share:/home/django/share
+      - ./data:/home/django/files:ro
+      - juicefs-mount:/home/django/jfs:ro
+    environment:
+      - DJANGO_MODWSGI_EXTRA_ARGS=
+      - ALLOWED_HOSTS=*
+      - CVAT_REDIS_HOST=redis
+      - CVAT_POSTGRES_HOST=postgres
+      - CVAT_POSTGRES_USER=mlops
+      - CVAT_POSTGRES_PASSWORD=mlops_dev_password
+      - CVAT_POSTGRES_DBNAME=cvat
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  cvat-worker-import:
+    image: cvat/server:v2.9.1
+    container_name: mlops-cvat-worker-import
+    restart: unless-stopped
+    depends_on:
+      - cvat-server
+    command: /home/django/wait-for-it.sh cvat-server:8080 -t 0 -- python3 ~/manage.py rqworker -v 3 import
+    volumes:
+      - cvat-data:/home/django/data
+      - cvat-share:/home/django/share
+    environment:
+      - CVAT_REDIS_HOST=redis
+      - CVAT_POSTGRES_HOST=postgres
+      - CVAT_POSTGRES_USER=mlops
+      - CVAT_POSTGRES_PASSWORD=mlops_dev_password
+      - CVAT_POSTGRES_DBNAME=cvat
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  cvat-worker-export:
+    image: cvat/server:v2.9.1
+    container_name: mlops-cvat-worker-export
+    restart: unless-stopped
+    depends_on:
+      - cvat-server
+    command: /home/django/wait-for-it.sh cvat-server:8080 -t 0 -- python3 ~/manage.py rqworker -v 3 export
+    volumes:
+      - cvat-data:/home/django/data
+      - cvat-share:/home/django/share
+    environment:
+      - CVAT_REDIS_HOST=redis
+      - CVAT_POSTGRES_HOST=postgres
+      - CVAT_POSTGRES_USER=mlops
+      - CVAT_POSTGRES_PASSWORD=mlops_dev_password
+      - CVAT_POSTGRES_DBNAME=cvat
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  cvat-ui:
+    image: cvat/ui:v2.9.1
+    container_name: mlops-cvat-ui
+    restart: unless-stopped
+    depends_on:
+      - cvat-server
+    ports:
+      - "8082:80"
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ===========================================================================
+  # DATA EXPLORATION - Renumics Spotlight
+  # ===========================================================================
+
+  spotlight:
+    build:
+      context: .
+      dockerfile: services/spotlight/Dockerfile
+    image: mlops-spotlight:latest
+    container_name: mlops-spotlight
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "8083:8000"
+    volumes:
+      - ./data:/workspace/data:ro
+      - ./outputs:/workspace/outputs:ro
+      - juicefs-mount:/workspace/jfs:ro
+    environment:
+      - SPOTLIGHT_HOST=0.0.0.0
+      - SPOTLIGHT_PORT=8000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # ===========================================================================
+  # SECRETS MANAGEMENT - HashiCorp Vault
+  # ===========================================================================
+
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: mlops-vault
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    volumes:
+      - vault-data:/vault/data
+      - ./docker/vault/config:/vault/config:ro
+    environment:
+      - VAULT_DEV_ROOT_TOKEN_ID=mlops-dev-token
+      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+      - VAULT_ADDR=http://127.0.0.1:8200
+    cap_add:
+      - IPC_LOCK
+    command: server -dev -dev-root-token-id=mlops-dev-token
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ===========================================================================
+  # LLM API GATEWAY - LiteLLM
+  # ===========================================================================
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: mlops-litellm
+    restart: unless-stopped
+    depends_on:
+      vault:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./docker/litellm/config.yaml:/app/config.yaml:ro
+    environment:
+      - LITELLM_MASTER_KEY=sk-mlops-dev-key
+      - DATABASE_URL=postgresql://mlops:mlops_dev_password@postgres:5432/litellm
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
+    command: --config /app/config.yaml --port 4000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ===========================================================================
+  # DATASET VISUALIZATION - FiftyOne
+  # ===========================================================================
+
   fiftyone:
     build:
       context: .
@@ -115,6 +446,7 @@ services:
     volumes:
       - fiftyone-data:/workspace/fiftyone/datasets
       - ./data:/workspace/data:ro
+      - juicefs-mount:/workspace/jfs:ro
     environment:
       - FIFTYONE_APP_ADDRESS=0.0.0.0
       - FIFTYONE_APP_PORT=5151
@@ -133,6 +465,10 @@ services:
           cpus: '2'
           memory: 4G
 
+  # ===========================================================================
+  # COMFYUI - Image Generation Workflows
+  # ===========================================================================
+
   comfyui:
     build:
       context: .
@@ -146,6 +482,7 @@ services:
       - comfyui-models:/workspace/comfyui/models
       - comfyui-output:/workspace/comfyui/output
       - ./models:/workspace/models:ro
+      - juicefs-mount:/workspace/jfs:ro
     environment:
       - COMFYUI_HOST=0.0.0.0
       - COMFYUI_PORT=8188
@@ -174,12 +511,18 @@ services:
       context: .
       dockerfile: pipelines/collect/Dockerfile
     image: mlops-collect:latest
+    depends_on:
+      juicefs-mount:
+        condition: service_healthy
     volumes:
       - .:/workspace:cached
       - ./data/raw:/workspace/data/raw
       - ./data/collected:/workspace/data/collected
+      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
     networks:
       - mlops-network
     profiles:
@@ -198,16 +541,21 @@ services:
     image: mlops-annotate:latest
     depends_on:
       - mongodb
+      - aim
     volumes:
       - .:/workspace:cached
       - ./data:/workspace/data
       - ./models:/workspace/models
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
+      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
       - HF_HOME=/workspace/.cache/huggingface
+      - AIM_REPO=/workspace/outputs/aim
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
     networks:
       - mlops-network
     profiles:
@@ -225,17 +573,22 @@ services:
       dockerfile: pipelines/train/Dockerfile
     image: mlops-train:latest
     depends_on:
-      - wandb-server
+      - aim
     volumes:
       - .:/workspace:cached
       - ./data:/workspace/data
       - ./models:/workspace/models
       - ./outputs:/workspace/outputs
       - huggingface-cache:/workspace/.cache/huggingface
+      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
-      - WANDB_BASE_URL=http://wandb-server:8080
+      - AIM_REPO=/workspace/outputs/aim
+      - AIM_SERVER=http://aim:53800
       - HF_HOME=/workspace/.cache/huggingface
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
+      - LITELLM_API_BASE=http://litellm:4000
     networks:
       - mlops-network
     profiles:
@@ -253,7 +606,7 @@ services:
       dockerfile: pipelines/evaluate/Dockerfile
     image: mlops-evaluate:latest
     depends_on:
-      - wandb-server
+      - aim
       - mongodb
     volumes:
       - .:/workspace:cached
@@ -262,11 +615,15 @@ services:
       - ./outputs:/workspace/outputs
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
+      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
-      - WANDB_BASE_URL=http://wandb-server:8080
+      - AIM_REPO=/workspace/outputs/aim
+      - AIM_SERVER=http://aim:53800
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
       - HF_HOME=/workspace/.cache/huggingface
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
     networks:
       - mlops-network
     profiles:
@@ -284,7 +641,7 @@ services:
       dockerfile: pipelines/infer/Dockerfile
     image: mlops-infer:latest
     depends_on:
-      - wandb-server
+      - aim
       - mongodb
     volumes:
       - .:/workspace:cached
@@ -293,11 +650,16 @@ services:
       - ./outputs:/workspace/outputs
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
+      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
-      - WANDB_BASE_URL=http://wandb-server:8080
+      - AIM_REPO=/workspace/outputs/aim
+      - AIM_SERVER=http://aim:53800
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
       - HF_HOME=/workspace/.cache/huggingface
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
+      - LITELLM_API_BASE=http://litellm:4000
     networks:
       - mlops-network
     profiles:
@@ -319,7 +681,7 @@ services:
     image: mlops-dev:latest
     container_name: mlops-dev
     depends_on:
-      - wandb-server
+      - aim
       - mongodb
     volumes:
       - .:/workspace:cached
@@ -327,13 +689,18 @@ services:
       - ./models:/workspace/models
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
+      - juicefs-mount:/workspace/jfs
     environment:
       - MLOPS_ENV=development
       - DEBUG=true
-      - WANDB_BASE_URL=http://wandb-server:8080
+      - AIM_REPO=/workspace/outputs/aim
+      - AIM_SERVER=http://aim:53800
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
       - HF_HOME=/workspace/.cache/huggingface
       - COMPUTE_DEVICE=cpu
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=mlops-dev-token
+      - LITELLM_API_BASE=http://litellm:4000
     ports:
       - "8888:8888"
     stdin_open: true
@@ -354,8 +721,15 @@ services:
 
 volumes:
   mongodb-data:
-  wandb-data:
+  redis-data:
+  postgres-data:
+  aim-data:
+  juicefs-data:
+  juicefs-mount:
   label-studio-data:
+  cvat-data:
+  cvat-share:
+  vault-data:
   fiftyone-data:
   comfyui-models:
   comfyui-output:

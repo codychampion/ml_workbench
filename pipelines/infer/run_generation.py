@@ -334,7 +334,7 @@ if __name__ == "__main__":
 # def launch_gpu_generation(prompts: list, gpu_type: str = "A100"):
 #     """Launch generation on cloud GPU via SkyPilot."""
 #     task = sky.Task(
-#         run="python projects/flux-comfyui-generation/run_generation.py",
+#         run="python -m pipelines.infer.run_generation",
 #         setup="pip install -r requirements.txt"
 #     )
 #     task.set_resources(sky.Resources(

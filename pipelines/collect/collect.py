@@ -301,8 +301,8 @@ def main():
     print("=" * 60)
     print(f"Output directory: {args.output_dir}")
     print("\nNext steps:")
-    print("  1. Caption images: python projects/data-collector/caption.py")
-    print("  2. View in FiftyOne: python projects/data-collector/create_dataset.py")
+    print("  1. Caption images: python -m pipelines.annotate.caption")
+    print("  2. View in FiftyOne: python -m pipelines.annotate.create_dataset")
 
 
 if __name__ == "__main__":

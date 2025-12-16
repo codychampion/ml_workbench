@@ -391,5 +391,5 @@ if __name__ == "__main__":
 #   pip install peft xformers
 #
 # run: |
-#   python projects/lora-trainer/train_lora.py --epochs 100 --device cuda
+#   python -m pipelines.train.train_lora --epochs 100 --device cuda
 # """

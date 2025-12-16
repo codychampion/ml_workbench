@@ -22,6 +22,8 @@ from PIL import Image
 from tqdm import tqdm
 import torch
 
+# Support both direct execution and module execution (-m)
+sys.path.insert(0, str(Path(__file__).parent))
 from models import get_model_config, list_models, MODELS
 
 

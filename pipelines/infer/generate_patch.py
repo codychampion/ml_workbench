@@ -495,7 +495,7 @@ if __name__ == "__main__":
 # def launch_gpu_attack_eval(config: dict, gpu_type: str = "V100"):
 #     """Launch attack evaluation on cloud GPU via SkyPilot."""
 #     task = sky.Task(
-#         run="python projects/adversarial-patches/generate_patch.py --gpu",
+#         run="python -m pipelines.infer.generate_patch --gpu",
 #         setup="pip install -r requirements.txt"
 #     )
 #     task.set_resources(sky.Resources(
