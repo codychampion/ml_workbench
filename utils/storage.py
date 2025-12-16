@@ -1,7 +1,12 @@
 """
 Storage Utilities
 =================
-Helper functions for initializing S3-compatible storage from Hydra config.
+Helper functions for initializing S3-compatible storage.
+
+Credential Priority:
+    1. HashiCorp Vault (if available)
+    2. Hydra configuration
+    3. Environment variables
 
 Usage:
     from utils.storage import init_storage_from_hydra
@@ -27,17 +32,50 @@ except ImportError:
     S3Client = None
     S3Config = None
 
+# Import Vault client
+try:
+    from .vault import get_s3_credentials, S3Credentials
+    VAULT_AVAILABLE = True
+except ImportError:
+    VAULT_AVAILABLE = False
+    get_s3_credentials = None
+    S3Credentials = None
+
+
+def _get_credentials_from_vault() -> Optional[dict]:
+    """Try to get S3 credentials from Vault."""
+    if not VAULT_AVAILABLE:
+        return None
+
+    try:
+        creds = get_s3_credentials(fallback_to_env=False)
+        return {
+            "endpoint": creds.endpoint,
+            "access_key": creds.access_key,
+            "secret_key": creds.secret_key,
+            "region": creds.region,
+        }
+    except (ValueError, Exception):
+        return None
+
 
 def init_storage_from_hydra(
     cfg: DictConfig,
-    bucket_type: str = "data"
+    bucket_type: str = "data",
+    use_vault: bool = True
 ) -> Optional["S3Client"]:
     """
-    Initialize S3 client from Hydra configuration.
+    Initialize S3 client with credentials from Vault, Hydra, or environment.
+
+    Credential priority:
+        1. Vault (if use_vault=True and available)
+        2. Hydra configuration
+        3. Environment variables
 
     Args:
         cfg: Hydra DictConfig object
         bucket_type: Which bucket to use - "data", "models", or "outputs"
+        use_vault: Whether to try Vault first for credentials
 
     Returns:
         S3Client instance or None if not available
@@ -47,21 +85,28 @@ def init_storage_from_hydra(
         print("[Storage] Install with: pip install boto3")
         return None
 
+    # Try Vault first
+    vault_creds = None
+    if use_vault:
+        vault_creds = _get_credentials_from_vault()
+        if vault_creds:
+            print("[Storage] Using credentials from Vault")
+
     # Get storage config from Hydra
     storage_cfg = cfg.get("storage", cfg.get("infrastructure", {}).get("storage", {}))
+    storage_dict = OmegaConf.to_container(storage_cfg, resolve=True) if storage_cfg else {}
 
-    if not storage_cfg:
-        print("[Storage] Warning: No storage configuration found in Hydra config")
-        return None
-
-    # Resolve any interpolations
-    storage_dict = OmegaConf.to_container(storage_cfg, resolve=True)
-
-    # Get endpoint and credentials
-    endpoint = storage_dict.get("endpoint", os.environ.get("S3_ENDPOINT", "http://minio:9000"))
-    access_key = storage_dict.get("access_key", os.environ.get("S3_ACCESS_KEY", "mlops-admin"))
-    secret_key = storage_dict.get("secret_key", os.environ.get("S3_SECRET_KEY", "mlops-dev-password"))
-    region = storage_dict.get("region", os.environ.get("S3_REGION", "us-east-1"))
+    # Determine credentials (Vault > Hydra > Env)
+    if vault_creds:
+        endpoint = vault_creds["endpoint"]
+        access_key = vault_creds["access_key"]
+        secret_key = vault_creds["secret_key"]
+        region = vault_creds["region"]
+    else:
+        endpoint = storage_dict.get("endpoint", os.environ.get("S3_ENDPOINT", "http://minio:9000"))
+        access_key = storage_dict.get("access_key", os.environ.get("S3_ACCESS_KEY", "mlops-admin"))
+        secret_key = storage_dict.get("secret_key", os.environ.get("S3_SECRET_KEY", "mlops-dev-password"))
+        region = storage_dict.get("region", os.environ.get("S3_REGION", "us-east-1"))
 
     # Get bucket name based on type
     buckets = storage_dict.get("buckets", {})

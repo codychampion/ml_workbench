@@ -43,6 +43,7 @@ RUN pip install --no-cache-dir \
     hydra-core>=1.3.0 \
     omegaconf>=2.3.0 \
     boto3 \
+    hvac \
     fiftyone \
     Pillow numpy tqdm requests \
     python-dotenv pyyaml \

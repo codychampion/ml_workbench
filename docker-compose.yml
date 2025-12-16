@@ -19,6 +19,7 @@
 #   - HashiCorp Vault - Secrets management
 #   - LiteLLM     - LLM API gateway
 #   - FiftyOne    - Dataset visualization
+#   - SiYuan      - Knowledge base (Zettelkasten, papers, notes)
 #
 # Storage Strategy:
 #   MinIO provides S3-compatible API locally. To migrate to cloud:
@@ -41,6 +42,7 @@
 #   - CVAT:          http://localhost:8082
 #   - Spotlight:     http://localhost:8083
 #   - FiftyOne:      http://localhost:5151
+#   - SiYuan:        http://localhost:6806 (code: mlops-dev)
 #   - ComfyUI:       http://localhost:8188
 #   - Vault:         http://localhost:8200
 #   - LiteLLM:       http://localhost:4000
@@ -495,6 +497,39 @@ services:
           memory: 1G
 
   # ===========================================================================
+  # KNOWLEDGE BASE - SiYuan (Zettelkasten-style notes)
+  # ===========================================================================
+  # Self-hosted note-taking for research papers, experiment notes, and docs.
+  # Supports Markdown, backlinks, graph view, and S3 sync.
+
+  siyuan:
+    image: b3log/siyuan:latest
+    container_name: mlops-siyuan
+    restart: unless-stopped
+    ports:
+      - "6806:6806"
+    volumes:
+      - siyuan-data:/siyuan/workspace
+      - ./outputs:/siyuan/workspace/data/assets/outputs:ro
+      - ./data:/siyuan/workspace/data/assets/data:ro
+    environment:
+      - SIYUAN_ACCESS_AUTH_CODE=mlops-dev
+    user: "1000:1000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6806/api/system/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # ===========================================================================
   # DATASET VISUALIZATION - FiftyOne
   # ===========================================================================
 
@@ -834,6 +869,7 @@ volumes:
   comfyui-models:
   comfyui-output:
   huggingface-cache:
+  siyuan-data:
 
 # =============================================================================
 # NETWORKS

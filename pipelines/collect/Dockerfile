@@ -29,6 +29,7 @@ RUN pip install --no-cache-dir \
     gallery-dl \
     yt-dlp \
     boto3 \
+    hvac \
     "dvc[all]>=3.0.0" \
     Pillow requests tqdm \
     python-dotenv pyyaml
