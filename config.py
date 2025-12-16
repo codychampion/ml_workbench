@@ -2,9 +2,13 @@
 MLOps Workspace Configuration
 =============================
 Central configuration module using environment variables with sensible defaults.
-All sensitive credentials should be set via environment variables, never hardcoded.
+All sensitive credentials should be set via environment variables or retrieved from Vault.
 
-Phase 1: Local Core - CPU-only, offline mode, mocked cloud services
+Infrastructure:
+  - AIM: Experiment tracking (self-hosted)
+  - JuiceFS: Distributed storage
+  - Vault: Secrets management
+  - LiteLLM: LLM API gateway
 """
 
 import os
@@ -14,25 +18,76 @@ from typing import Optional
 
 
 @dataclass
-class WandBConfig:
-    """Weights & Biases configuration."""
+class AIMConfig:
+    """AIM experiment tracking configuration (replaces W&B)."""
 
-    project: str = field(default_factory=lambda: os.getenv("WANDB_PROJECT", "mlops-workspace"))
-    entity: Optional[str] = field(default_factory=lambda: os.getenv("WANDB_ENTITY"))
-    # PHASE 1: Always use offline mode for local development
-    mode: str = field(default_factory=lambda: os.getenv("WANDB_MODE", "offline"))
-    dir: Path = field(default_factory=lambda: Path(os.getenv("WANDB_DIR", "./outputs/wandb")))
+    # Local repo path for experiments
+    repo: Path = field(default_factory=lambda: Path(os.getenv("AIM_REPO", "./outputs/aim")))
 
-    # PHASE 2/3 TODO: Add online mode support with proper API key management
-    # api_key: Optional[str] = field(default_factory=lambda: os.getenv("WANDB_API_KEY"))
-    # run_group: Optional[str] = None  # For grouping distributed training runs
+    # Remote server (for distributed tracking)
+    server: Optional[str] = field(default_factory=lambda: os.getenv("AIM_SERVER"))
+
+    # Experiment metadata
+    experiment: str = field(default_factory=lambda: os.getenv("AIM_EXPERIMENT", "default"))
+
+    # UI settings
+    ui_port: int = field(default_factory=lambda: int(os.getenv("AIM_UI_PORT", "43800")))
+    tracking_port: int = field(default_factory=lambda: int(os.getenv("AIM_TRACKING_PORT", "53800")))
+
+    @property
+    def is_remote(self) -> bool:
+        """Check if using remote AIM server."""
+        return self.server is not None
+
+
+@dataclass
+class VaultConfig:
+    """HashiCorp Vault secrets management configuration."""
+
+    addr: str = field(default_factory=lambda: os.getenv("VAULT_ADDR", "http://vault:8200"))
+    token: Optional[str] = field(default_factory=lambda: os.getenv("VAULT_TOKEN"))
+
+    # Secret paths
+    secrets_path: str = field(default_factory=lambda: os.getenv("VAULT_SECRETS_PATH", "secret/mlops"))
+
+    @property
+    def is_available(self) -> bool:
+        """Check if Vault is configured."""
+        return self.token is not None
+
+
+@dataclass
+class JuiceFSConfig:
+    """JuiceFS distributed storage configuration."""
+
+    mount_point: Path = field(default_factory=lambda: Path(os.getenv("JUICEFS_MOUNT", "/workspace/jfs")))
+    metadata_url: str = field(default_factory=lambda: os.getenv("JUICEFS_METADATA", "redis://redis:6379/1"))
+
+    # Cache settings
+    cache_dir: Path = field(default_factory=lambda: Path(os.getenv("JUICEFS_CACHE_DIR", "/tmp/jfs-cache")))
+    cache_size_mb: int = field(default_factory=lambda: int(os.getenv("JUICEFS_CACHE_SIZE", "10240")))
+
+    @property
+    def is_mounted(self) -> bool:
+        """Check if JuiceFS is mounted."""
+        return self.mount_point.exists() and self.mount_point.is_dir()
+
+
+@dataclass
+class LiteLLMConfig:
+    """LiteLLM API gateway configuration."""
+
+    api_base: str = field(default_factory=lambda: os.getenv("LITELLM_API_BASE", "http://litellm:4000"))
+    api_key: Optional[str] = field(default_factory=lambda: os.getenv("LITELLM_API_KEY", "sk-mlops-dev-key"))
+
+    # Default model for local inference
+    default_model: str = field(default_factory=lambda: os.getenv("LITELLM_DEFAULT_MODEL", "ollama/mistral"))
 
 
 @dataclass
 class B2Config:
-    """Backblaze B2 storage configuration."""
+    """Backblaze B2 storage configuration (legacy, prefer JuiceFS)."""
 
-    # PHASE 1: Mocked - these are placeholders for future use
     application_key_id: Optional[str] = field(
         default_factory=lambda: os.getenv("B2_APPLICATION_KEY_ID")
     )
@@ -43,7 +98,7 @@ class B2Config:
         default_factory=lambda: os.getenv("B2_BUCKET_NAME", "mlops-data-bucket")
     )
 
-    # PHASE 1: Local mock paths
+    # Local mock paths
     local_manifest_path: Path = field(
         default_factory=lambda: Path(os.getenv("B2_LOCAL_MANIFEST", ".b2_local_manifest.json"))
     )
@@ -51,13 +106,10 @@ class B2Config:
         default_factory=lambda: Path(os.getenv("B2_LOCAL_DATA_DIR", "./data/raw"))
     )
 
-    # Rate limiting configuration (simulated in Phase 1)
+    # Rate limiting configuration
     max_requests_per_minute: int = field(
         default_factory=lambda: int(os.getenv("B2_MAX_REQUESTS_PER_MIN", "100"))
     )
-
-    # PHASE 2/3 TODO: Add encryption settings for data at rest
-    # encryption_key: Optional[str] = field(default_factory=lambda: os.getenv("B2_ENCRYPTION_KEY"))
 
 
 @dataclass
@@ -67,34 +119,21 @@ class FiftyOneConfig:
     dataset_dir: Path = field(
         default_factory=lambda: Path(os.getenv("FIFTYONE_DATASET_DIR", "./data/fiftyone"))
     )
-    # PHASE 1: Local server only
     port: int = field(default_factory=lambda: int(os.getenv("FIFTYONE_PORT", "5151")))
     address: str = field(default_factory=lambda: os.getenv("FIFTYONE_ADDRESS", "0.0.0.0"))
-
-    # PHASE 2/3 TODO: Add remote access configuration for team collaboration
-    # remote_url: Optional[str] = field(default_factory=lambda: os.getenv("FIFTYONE_REMOTE_URL"))
+    database_uri: str = field(
+        default_factory=lambda: os.getenv("FIFTYONE_DATABASE_URI", "mongodb://mongodb:27017/fiftyone")
+    )
 
 
 @dataclass
 class ComputeConfig:
     """Compute resource configuration."""
 
-    # PHASE 1: CPU-only execution
     device: str = field(default_factory=lambda: os.getenv("COMPUTE_DEVICE", "cpu"))
     num_workers: int = field(
         default_factory=lambda: int(os.getenv("NUM_WORKERS", "2"))
     )
-
-    # PHASE 2/3 TODO: SkyPilot integration for cloud GPU provisioning
-    # skypilot_config:
-    #   - cloud_providers: ["aws", "gcp", "azure"]
-    #   - instance_types: ["p3.2xlarge", "a100-40gb"]
-    #   - spot_instances: True  # Cost optimization
-    #   - max_cost_per_hour: 10.0
-
-    # PHASE 2/3 TODO: Prefect integration for workflow orchestration
-    # prefect_api_url: Optional[str] = field(default_factory=lambda: os.getenv("PREFECT_API_URL"))
-    # prefect_api_key: Optional[str] = field(default_factory=lambda: os.getenv("PREFECT_API_KEY"))
 
 
 @dataclass
@@ -103,14 +142,15 @@ class ProjectPaths:
 
     root: Path = field(default_factory=lambda: Path(os.getenv("PROJECT_ROOT", ".")))
     data_raw: Path = field(default_factory=lambda: Path("./data/raw"))
+    data_collected: Path = field(default_factory=lambda: Path("./data/collected"))
     data_processed: Path = field(default_factory=lambda: Path("./data/processed"))
     outputs: Path = field(default_factory=lambda: Path("./outputs"))
-    models: Path = field(default_factory=lambda: Path("./outputs/models"))
+    models: Path = field(default_factory=lambda: Path("./models"))
     logs: Path = field(default_factory=lambda: Path("./outputs/logs"))
 
     def ensure_dirs(self) -> None:
         """Create all project directories if they don't exist."""
-        for path_attr in ["data_raw", "data_processed", "outputs", "models", "logs"]:
+        for path_attr in ["data_raw", "data_collected", "data_processed", "outputs", "models", "logs"]:
             path = getattr(self, path_attr)
             path.mkdir(parents=True, exist_ok=True)
 
@@ -119,9 +159,17 @@ class ProjectPaths:
 class Config:
     """Main configuration container."""
 
-    wandb: WandBConfig = field(default_factory=WandBConfig)
+    # New services
+    aim: AIMConfig = field(default_factory=AIMConfig)
+    vault: VaultConfig = field(default_factory=VaultConfig)
+    juicefs: JuiceFSConfig = field(default_factory=JuiceFSConfig)
+    litellm: LiteLLMConfig = field(default_factory=LiteLLMConfig)
+
+    # Data services
     b2: B2Config = field(default_factory=B2Config)
     fiftyone: FiftyOneConfig = field(default_factory=FiftyOneConfig)
+
+    # Compute
     compute: ComputeConfig = field(default_factory=ComputeConfig)
     paths: ProjectPaths = field(default_factory=ProjectPaths)
 
@@ -136,7 +184,7 @@ class Config:
     def __post_init__(self):
         """Ensure required directories exist on initialization."""
         self.paths.ensure_dirs()
-        self.wandb.dir.mkdir(parents=True, exist_ok=True)
+        self.aim.repo.mkdir(parents=True, exist_ok=True)
 
 
 # Global configuration instance
@@ -155,13 +203,25 @@ def reload_config() -> Config:
     return config
 
 
-# PHASE 2/3 TODO: Add configuration validation
-# def validate_config() -> List[str]:
-#     """Validate configuration and return list of warnings/errors."""
-#     issues = []
-#     if config.environment == "production":
-#         if config.wandb.mode == "offline":
-#             issues.append("WARNING: W&B offline mode in production")
-#         if not config.b2.application_key_id:
-#             issues.append("ERROR: B2 credentials required in production")
-#     return issues
+def get_secret(path: str, key: str) -> Optional[str]:
+    """
+    Get a secret from Vault.
+
+    Args:
+        path: Secret path in Vault (e.g., "mlops/api-keys")
+        key: Key within the secret
+
+    Returns:
+        Secret value or None if not found
+    """
+    cfg = get_config()
+    if not cfg.vault.is_available:
+        return None
+
+    try:
+        import hvac
+        client = hvac.Client(url=cfg.vault.addr, token=cfg.vault.token)
+        secret = client.secrets.kv.v2.read_secret_version(path=path)
+        return secret["data"]["data"].get(key)
+    except Exception:
+        return None

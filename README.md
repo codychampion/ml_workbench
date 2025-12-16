@@ -1,18 +1,44 @@
-# MLOps Workspace
+# MLOps Workbench
 
-A professional MLOps repository with a **multi-container architecture** focused on reproducibility, experiment tracking, and modular service deployment.
+A comprehensive, self-hosted ML/AI pipeline workbench with a **pipeline-based architecture** for data collection, annotation, training, evaluation, and inference.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  SERVICES (long-running)              WORKERS (job executors)                │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐  ┌────────────┐ ┌───────────┐│
-│  │  ComfyUI   │ │  FiftyOne  │ │ W&B Local  │  │  flux-gen  │ │lora-train ││
-│  │   :8188    │ │   :5151    │ │   :8080    │  │            │ │           ││
-│  └────────────┘ └────────────┘ └────────────┘  └────────────┘ └───────────┘│
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│  INFRASTRUCTURE SERVICES                                                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │   AIM    │ │  Vault   │ │ LiteLLM  │ │ JuiceFS  │ │ MongoDB  │ │  Redis   │  │
+│  │  :43800  │ │  :8200   │ │  :4000   │ │(storage) │ │  (meta)  │ │ (cache)  │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  DATA TOOLS                                                                       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐               │
+│  │ FiftyOne │ │  Label   │ │   CVAT   │ │Spotlight │ │ ComfyUI  │               │
+│  │  :5151   │ │  Studio  │ │  :8082   │ │  :8083   │ │  :8188   │               │
+│  │  (viz)   │ │  :8081   │ │ (video)  │ │(explore) │ │  (gen)   │               │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘               │
+├──────────────────────────────────────────────────────────────────────────────────┤
+│  PIPELINE STAGES                                                                  │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐               │
+│  │ 1.collect│→│2.annotate│→│ 3.train  │→│4.evaluate│→│ 5.infer  │               │
+│  │  (data)  │ │(caption) │ │  (LoRA)  │ │(metrics) │ │  (gen)   │               │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘               │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Services Overview
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **AIM** | 43800 | Experiment tracking (replaces W&B) |
+| **Vault** | 8200 | Secrets management |
+| **LiteLLM** | 4000 | LLM API gateway (OpenAI-compatible) |
+| **FiftyOne** | 5151 | Dataset visualization |
+| **Label Studio** | 8081 | Image/text annotation |
+| **CVAT** | 8082 | Video annotation |
+| **Spotlight** | 8083 | Data exploration (Renumics) |
+| **ComfyUI** | 8188 | Image generation workflows |
 
 ---
 
@@ -22,12 +48,15 @@ A professional MLOps repository with a **multi-container architecture** focused 
 # Build all images
 docker-compose build
 
-# Start services (ComfyUI, FiftyOne, W&B)
+# Start infrastructure services
 docker-compose up -d
 
-# Run a worker job
-docker-compose run --rm flux-gen
-docker-compose run --rm lora-trainer
+# Run pipeline stages
+docker-compose run --rm collect python -m pipelines.collect.collect --subreddit earthporn
+docker-compose run --rm annotate python -m pipelines.annotate.caption --input-dir ./data/collected
+docker-compose run --rm train python -m pipelines.train.finetune --dataset ./data/collected
+docker-compose run --rm evaluate python -m pipelines.evaluate.metrics --predictions ./outputs
+docker-compose run --rm infer python -m pipelines.infer.run_generation --prompts "A sunset"
 
 # Dev shell with all tools
 docker-compose --profile dev up -d dev
@@ -37,102 +66,264 @@ docker-compose exec dev bash
 docker-compose down
 ```
 
-### Services
-
-| Service | URL | Description |
-|---------|-----|-------------|
-| ComfyUI | http://localhost:8188 | Image generation UI |
-| FiftyOne | http://localhost:5151 | Data visualization |
-| W&B Local | http://localhost:8080 | Experiment tracking |
-
 ---
 
 ## Project Structure
 
 ```
-mlops-workspace/
-├── docker/base/                 # Base Dockerfiles
-│   ├── Dockerfile.base          # Python foundation
-│   ├── Dockerfile.torch-cpu     # + PyTorch CPU
-│   └── Dockerfile.diffusers     # + HuggingFace
+ml_workbench/
+├── pipelines/                      # Pipeline stages
+│   ├── collect/                    # Stage 1: Data collection
+│   │   ├── Dockerfile
+│   │   └── collect.py              # Reddit/gallery-dl scraping
+│   │
+│   ├── annotate/                   # Stage 2: Data annotation
+│   │   ├── Dockerfile
+│   │   ├── caption.py              # Auto-captioning
+│   │   ├── models.py               # Model configs
+│   │   └── create_dataset.py       # FiftyOne dataset creation
+│   │
+│   ├── train/                      # Stage 3: Model training
+│   │   ├── Dockerfile
+│   │   ├── finetune.py             # Captioner fine-tuning
+│   │   └── train_lora.py           # LoRA training
+│   │
+│   ├── evaluate/                   # Stage 4: Evaluation
+│   │   ├── Dockerfile
+│   │   ├── benchmark.py            # Performance benchmarks
+│   │   └── metrics.py              # BLEU/ROUGE metrics
+│   │
+│   └── infer/                      # Stage 5: Inference
+│       ├── Dockerfile
+│       ├── run_generation.py       # Image generation
+│       └── generate_patch.py       # Adversarial patches
 │
-├── services/                    # Long-running servers
-│   ├── comfyui/
-│   ├── fiftyone/
-│   └── wandb-local/
+├── services/                       # Long-running services
+│   ├── fiftyone/                   # Dataset visualization
+│   ├── spotlight/                  # Data exploration
+│   └── comfyui/                    # Image generation UI
 │
-├── projects/                    # Worker containers
-│   ├── flux-comfyui-generation/
-│   ├── adversarial-patches/
-│   └── lora-trainer/
+├── docker/                         # Docker configs
+│   ├── base/                       # Base Dockerfiles
+│   ├── init-scripts/               # PostgreSQL init
+│   ├── litellm/                    # LiteLLM config
+│   └── vault/                      # Vault config
 │
-├── docker-compose.yml           # Main orchestration
-├── docker-compose.gpu.yml       # GPU overlay (Phase 2/3)
-└── config.py                    # Central config
+├── data/                           # Data directories
+│   ├── raw/                        # Raw collected data
+│   ├── collected/                  # Processed collections
+│   └── processed/                  # Annotated data
+│
+├── models/                         # Trained models
+├── outputs/                        # Pipeline outputs
+│   ├── aim/                        # AIM experiment logs
+│   └── checkpoints/                # Model checkpoints
+│
+├── docker-compose.yml              # Main orchestration
+├── config.py                       # Central configuration
+├── dvc.yaml                        # DVC pipeline definition
+└── params.yaml                     # Pipeline parameters
 ```
 
 ---
 
-## Running Workers
+## Pipeline Stages
 
-Workers are defined with profiles so they don't start automatically:
+### 1. Collect - Data Gathering
+```bash
+# Collect images from Reddit
+docker-compose run --rm collect python -m pipelines.collect.collect \
+    --subreddit earthporn --limit 100
+
+# Collect from URL
+docker-compose run --rm collect python -m pipelines.collect.collect \
+    --url "https://reddit.com/r/art/top"
+```
+
+### 2. Annotate - Auto-Captioning
+```bash
+# Caption collected images
+docker-compose run --rm annotate python -m pipelines.annotate.caption \
+    --input-dir ./data/collected --model blip-base
+
+# Create FiftyOne dataset
+docker-compose run --rm annotate python -m pipelines.annotate.create_dataset \
+    --input-dir ./data/collected --name my-dataset
+```
+
+### 3. Train - Model Fine-Tuning
+```bash
+# Fine-tune captioner with LoRA
+docker-compose run --rm train python -m pipelines.train.finetune \
+    --dataset ./data/collected --model blip-base --epochs 3
+
+# Train LoRA for image generation
+docker-compose run --rm train python -m pipelines.train.train_lora \
+    --epochs 10 --lora-rank 16
+```
+
+### 4. Evaluate - Metrics & Benchmarks
+```bash
+# Run benchmarks
+docker-compose run --rm evaluate python -m pipelines.evaluate.benchmark \
+    --model ./models/captioner
+
+# Calculate metrics
+docker-compose run --rm evaluate python -m pipelines.evaluate.metrics \
+    --predictions ./outputs/predictions.json
+```
+
+### 5. Infer - Generation
+```bash
+# Generate images
+docker-compose run --rm infer python -m pipelines.infer.run_generation \
+    --prompts "A mountain at sunset" "A futuristic city"
+```
+
+---
+
+## DVC Pipeline
+
+Run the full pipeline with DVC:
 
 ```bash
-# Image generation
-docker-compose run --rm flux-gen python projects/flux-comfyui-generation/run_generation.py \
-    --prompts "A mountain at sunset"
+# Run full pipeline
+dvc repro
 
-# Adversarial patches
-docker-compose run --rm adv-patches python projects/adversarial-patches/generate_patch.py
+# Run specific stage
+dvc repro train-captioner
 
-# LoRA training
-docker-compose run --rm lora-trainer python projects/lora-trainer/train_lora.py --epochs 10
+# View pipeline graph
+dvc dag
 ```
 
 ---
 
-## GPU Support (Phase 2/3)
+## Self-Hosted Services
 
+All services are self-hosted with no external API dependencies:
+
+### AIM - Experiment Tracking
 ```bash
-# Use GPU overlay
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# Access UI
+open http://localhost:43800
+
+# Python usage
+from aim import Run
+run = Run(repo="./outputs/aim")
+run.track(loss, name="loss", epoch=epoch)
+```
+
+### Vault - Secrets Management
+```bash
+# Access UI (dev token: mlops-dev-token)
+open http://localhost:8200
+
+# Store a secret
+vault kv put secret/mlops/api-keys openai=sk-xxx
+```
+
+### LiteLLM - LLM Gateway
+```bash
+# OpenAI-compatible API
+curl http://localhost:4000/v1/chat/completions \
+    -H "Authorization: Bearer sk-mlops-dev-key" \
+    -d '{"model": "ollama/mistral", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+### CVAT - Video Annotation
+```bash
+# Access UI
+open http://localhost:8082
+
+# Default credentials: admin/admin
+```
+
+### Label Studio - Data Labeling
+```bash
+# Access UI
+open http://localhost:8081
+```
+
+### Renumics Spotlight - Data Exploration
+```bash
+# Access UI
+open http://localhost:8083
 ```
 
 ---
 
-## Adding New Projects
+## Configuration
 
-1. Create `projects/my-project/Dockerfile`:
-```dockerfile
-FROM mlops-diffusers:latest
-COPY projects/my-project/ /workspace/projects/my-project/
-CMD ["python", "projects/my-project/main.py"]
+All configuration is managed via environment variables or `config.py`:
+
+```python
+from config import get_config, get_secret
+
+config = get_config()
+
+# AIM tracking
+print(config.aim.repo)           # ./outputs/aim
+print(config.aim.server)         # http://aim:53800
+
+# Vault secrets
+api_key = get_secret("mlops/api-keys", "openai")
+
+# LiteLLM
+print(config.litellm.api_base)   # http://litellm:4000
 ```
-
-2. Add to `docker-compose.yml`:
-```yaml
-my-project:
-  build:
-    dockerfile: projects/my-project/Dockerfile
-  profiles:
-    - workers
-```
-
-3. Run: `docker-compose run --rm my-project`
 
 ---
 
 ## Common Commands
 
 ```bash
-docker-compose build              # Build all
-docker-compose up -d              # Start services
-docker-compose run --rm flux-gen  # Run worker
-docker-compose logs -f comfyui    # View logs
-docker-compose down               # Stop all
-docker-compose down -v            # Stop + remove volumes
+# Build
+docker-compose build
+
+# Start services
+docker-compose up -d
+
+# Run pipeline stage
+docker-compose run --rm <stage> <command>
+
+# View logs
+docker-compose logs -f aim
+
+# Stop all
+docker-compose down
+
+# Stop + remove volumes
+docker-compose down -v
+
+# GPU support (when available)
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
 ---
 
-*Phase 1: CPU-only, W&B offline, mocked B2 storage*
+## Adding New Pipeline Stages
+
+1. Create `pipelines/my-stage/Dockerfile`:
+```dockerfile
+FROM python:3.13-slim
+LABEL pipeline.stage="my-stage"
+WORKDIR /workspace
+COPY pipelines/my-stage/ /workspace/pipelines/my-stage/
+RUN pip install -r pipelines/my-stage/requirements.txt
+```
+
+2. Add to `docker-compose.yml`:
+```yaml
+my-stage:
+  build:
+    dockerfile: pipelines/my-stage/Dockerfile
+  profiles:
+    - pipeline
+```
+
+3. Run: `docker-compose run --rm my-stage python -m pipelines.my_stage.main`
+
+---
+
+*Self-hosted MLOps: AIM tracking, JuiceFS storage, Vault secrets, LiteLLM gateway*

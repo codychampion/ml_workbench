@@ -21,7 +21,9 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-from models import get_model_config, list_models
+# Add pipelines directory to path for cross-stage imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from annotate.models import get_model_config, list_models
 
 
 class CaptionDataset(torch.utils.data.Dataset):
