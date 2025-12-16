@@ -28,6 +28,7 @@ RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
 RUN pip install --no-cache-dir \
     gallery-dl \
     yt-dlp \
+    boto3 \
     "dvc[all]>=3.0.0" \
     Pillow requests tqdm \
     python-dotenv pyyaml

@@ -35,6 +35,7 @@ RUN pip install --no-cache-dir \
     aim \
     hydra-core>=1.3.0 \
     omegaconf>=2.3.0 \
+    boto3 \
     Pillow numpy tqdm requests \
     python-dotenv pyyaml \
     opencv-python-headless

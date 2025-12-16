@@ -10,6 +10,7 @@
 #   5. infer     - Model inference & generation
 #
 # Infrastructure Services:
+#   - MinIO       - S3-compatible object storage (mimics B2/AWS locally)
 #   - AIM         - Experiment tracking (replaces W&B)
 #   - JuiceFS     - Distributed storage (Redis-backed)
 #   - Label Studio - Image/text labeling
@@ -19,6 +20,12 @@
 #   - LiteLLM     - LLM API gateway
 #   - FiftyOne    - Dataset visualization
 #
+# Storage Strategy:
+#   MinIO provides S3-compatible API locally. To migrate to cloud:
+#   - Backblaze B2: Set S3_ENDPOINT=https://s3.us-west-000.backblazeb2.com
+#   - AWS S3: Set S3_ENDPOINT=https://s3.us-east-1.amazonaws.com
+#   No code changes needed - just update environment variables!
+#
 # Usage:
 #   docker-compose up -d                           # Start services
 #   docker-compose run --rm collect <cmd>          # Run collection
@@ -26,6 +33,17 @@
 #   docker-compose run --rm train <cmd>            # Run training
 #   docker-compose run --rm evaluate <cmd>         # Run evaluation
 #   docker-compose run --rm infer <cmd>            # Run inference
+#
+# Web UIs:
+#   - MinIO Console: http://localhost:9001
+#   - AIM:           http://localhost:43800
+#   - Label Studio:  http://localhost:8081
+#   - CVAT:          http://localhost:8082
+#   - Spotlight:     http://localhost:8083
+#   - FiftyOne:      http://localhost:5151
+#   - ComfyUI:       http://localhost:8188
+#   - Vault:         http://localhost:8200
+#   - LiteLLM:       http://localhost:4000
 #
 # =============================================================================
 
@@ -36,6 +54,55 @@ services:
   # ===========================================================================
   # CORE INFRASTRUCTURE
   # ===========================================================================
+
+  # MinIO - S3-compatible object storage (mimics Backblaze B2)
+  minio:
+    image: minio/minio:latest
+    container_name: mlops-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console UI
+    volumes:
+      - minio-data:/data
+    environment:
+      - MINIO_ROOT_USER=mlops-admin
+      - MINIO_ROOT_PASSWORD=mlops-dev-password
+      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # MinIO Client - Creates default buckets on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: mlops-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set myminio http://minio:9000 mlops-admin mlops-dev-password;
+      mc mb --ignore-existing myminio/mlops-data;
+      mc mb --ignore-existing myminio/mlops-models;
+      mc mb --ignore-existing myminio/mlops-outputs;
+      mc anonymous set download myminio/mlops-outputs;
+      echo 'MinIO buckets initialized successfully';
+      "
+    networks:
+      - mlops-network
+    restart: "no"
 
   # MongoDB - Database for FiftyOne and metadata
   mongodb:
@@ -514,6 +581,8 @@ services:
     depends_on:
       juicefs-mount:
         condition: service_healthy
+      minio:
+        condition: service_healthy
     volumes:
       - .:/workspace:cached
       - ./data/raw:/workspace/data/raw
@@ -523,6 +592,12 @@ services:
       - COMPUTE_DEVICE=cpu
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=mlops-dev-token
+      # S3-compatible storage (MinIO locally, B2/S3 in production)
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=mlops-admin
+      - S3_SECRET_KEY=mlops-dev-password
+      - S3_BUCKET=mlops-data
+      - S3_REGION=us-east-1
     networks:
       - mlops-network
     profiles:
@@ -542,6 +617,7 @@ services:
     depends_on:
       - mongodb
       - aim
+      - minio
     volumes:
       - .:/workspace:cached
       - ./data:/workspace/data
@@ -556,6 +632,11 @@ services:
       - AIM_REPO=/workspace/outputs/aim
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=mlops-dev-token
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=mlops-admin
+      - S3_SECRET_KEY=mlops-dev-password
+      - S3_BUCKET=mlops-data
+      - S3_REGION=us-east-1
     networks:
       - mlops-network
     profiles:
@@ -574,6 +655,7 @@ services:
     image: mlops-train:latest
     depends_on:
       - aim
+      - minio
     volumes:
       - .:/workspace:cached
       - ./data:/workspace/data
@@ -589,6 +671,11 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=mlops-dev-token
       - LITELLM_API_BASE=http://litellm:4000
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=mlops-admin
+      - S3_SECRET_KEY=mlops-dev-password
+      - S3_BUCKET=mlops-models
+      - S3_REGION=us-east-1
     networks:
       - mlops-network
     profiles:
@@ -608,6 +695,7 @@ services:
     depends_on:
       - aim
       - mongodb
+      - minio
     volumes:
       - .:/workspace:cached
       - ./data:/workspace/data
@@ -624,6 +712,11 @@ services:
       - HF_HOME=/workspace/.cache/huggingface
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=mlops-dev-token
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=mlops-admin
+      - S3_SECRET_KEY=mlops-dev-password
+      - S3_BUCKET=mlops-outputs
+      - S3_REGION=us-east-1
     networks:
       - mlops-network
     profiles:
@@ -643,6 +736,7 @@ services:
     depends_on:
       - aim
       - mongodb
+      - minio
     volumes:
       - .:/workspace:cached
       - ./data:/workspace/data
@@ -660,6 +754,11 @@ services:
       - VAULT_ADDR=http://vault:8200
       - VAULT_TOKEN=mlops-dev-token
       - LITELLM_API_BASE=http://litellm:4000
+      - S3_ENDPOINT=http://minio:9000
+      - S3_ACCESS_KEY=mlops-admin
+      - S3_SECRET_KEY=mlops-dev-password
+      - S3_BUCKET=mlops-outputs
+      - S3_REGION=us-east-1
     networks:
       - mlops-network
     profiles:
@@ -720,6 +819,7 @@ services:
 # =============================================================================
 
 volumes:
+  minio-data:
   mongodb-data:
   redis-data:
   postgres-data:

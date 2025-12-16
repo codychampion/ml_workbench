@@ -15,6 +15,26 @@ aim:
   sync_hydra: true
   log_system_params: true
 
+# S3-Compatible Storage (MinIO locally, B2/AWS in production)
+# Switch providers by changing environment variables - no code changes needed
+storage:
+  # S3 API endpoint
+  # - MinIO: http://minio:9000
+  # - B2: https://s3.us-west-000.backblazeb2.com
+  # - AWS: https://s3.us-east-1.amazonaws.com
+  endpoint: ${oc.env:S3_ENDPOINT,http://minio:9000}
+  access_key: ${oc.env:S3_ACCESS_KEY,mlops-admin}
+  secret_key: ${oc.env:S3_SECRET_KEY,mlops-dev-password}
+  region: ${oc.env:S3_REGION,us-east-1}
+  secure: ${oc.env:S3_SECURE,false}
+  # Default buckets
+  buckets:
+    data: ${oc.env:S3_BUCKET_DATA,mlops-data}
+    models: ${oc.env:S3_BUCKET_MODELS,mlops-models}
+    outputs: ${oc.env:S3_BUCKET_OUTPUTS,mlops-outputs}
+  # MinIO console (local dev only)
+  console_url: ${oc.env:MINIO_CONSOLE_URL,http://localhost:9001}
+
 # HashiCorp Vault - Secrets Management
 vault:
   addr: ${oc.env:VAULT_ADDR,http://vault:8200}
@@ -42,7 +62,7 @@ fiftyone:
   address: "0.0.0.0"
   database_uri: ${oc.env:FIFTYONE_DATABASE_URI,mongodb://mongodb:27017/fiftyone}
 
-# B2 Storage (legacy)
+# Legacy B2 Storage (deprecated - use storage.* settings above)
 b2:
   bucket_name: ${oc.env:B2_BUCKET_NAME,mlops-data-bucket}
   local_data_dir: ${paths.data.raw}
