@@ -32,19 +32,17 @@ RUN pip install --no-cache-dir \
     accelerate \
     peft>=0.7.0 \
     datasets>=2.16.0 \
-    # Metrics & evaluation
     scikit-learn \
     scipy \
     nltk \
     rouge-score \
-    # Visualization
     matplotlib \
     seaborn \
     pandas \
-    # ML tracking
-    wandb \
+    aim \
+    hydra-core>=1.3.0 \
+    omegaconf>=2.3.0 \
     fiftyone \
-    # Utilities
     Pillow numpy tqdm requests \
     python-dotenv pyyaml \
     tabulate jinja2
@@ -55,10 +53,12 @@ RUN mkdir -p /workspace/models /workspace/outputs/{metrics,reports,benchmarks} /
 COPY --chown=mlops:mlops config.py /workspace/
 COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
 COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
+COPY --chown=mlops:mlops conf/ /workspace/conf/
+COPY --chown=mlops:mlops utils/ /workspace/utils/
 
 USER mlops
 
 ENV HF_HOME=/workspace/.cache/huggingface
-ENV WANDB_MODE=offline
+ENV AIM_REPO=/workspace/outputs/aim
 
 CMD ["python", "-m", "pipelines.evaluate.benchmark", "--help"]

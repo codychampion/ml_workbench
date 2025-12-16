@@ -32,7 +32,9 @@ RUN pip install --no-cache-dir \
     accelerate \
     peft>=0.7.0 \
     fiftyone \
-    wandb \
+    aim \
+    hydra-core>=1.3.0 \
+    omegaconf>=2.3.0 \
     Pillow numpy tqdm requests \
     python-dotenv pyyaml \
     opencv-python-headless
@@ -43,11 +45,13 @@ RUN mkdir -p /workspace/models /workspace/outputs /workspace/data \
 COPY --chown=mlops:mlops config.py /workspace/
 COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
 COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
+COPY --chown=mlops:mlops conf/ /workspace/conf/
+COPY --chown=mlops:mlops utils/ /workspace/utils/
 
 USER mlops
 
 ENV HF_HOME=/workspace/.cache/huggingface
-ENV WANDB_MODE=offline
+ENV AIM_REPO=/workspace/outputs/aim
 ENV COMPUTE_DEVICE=cpu
 
 CMD ["python", "-m", "pipelines.infer.run_generation", "--help"]

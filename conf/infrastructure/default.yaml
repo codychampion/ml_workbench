@@ -1,0 +1,48 @@
+# =============================================================================
+# Infrastructure Configuration - Default
+# =============================================================================
+# Configuration for self-hosted MLOps services.
+# =============================================================================
+
+# AIM - Experiment Tracking
+aim:
+  repo: ${oc.env:AIM_REPO,${paths.outputs}/aim}
+  server: ${oc.env:AIM_SERVER,null}
+  experiment: ${oc.env:AIM_EXPERIMENT,default}
+  ui_port: 43800
+  tracking_port: 53800
+  # Sync with Hydra config
+  sync_hydra: true
+  log_system_params: true
+
+# HashiCorp Vault - Secrets Management
+vault:
+  addr: ${oc.env:VAULT_ADDR,http://vault:8200}
+  token: ${oc.env:VAULT_TOKEN,null}
+  secrets_path: secret/mlops
+  enabled: ${oc.env:VAULT_ENABLED,false}
+
+# JuiceFS - Distributed Storage
+juicefs:
+  mount_point: ${oc.env:JUICEFS_MOUNT,/workspace/jfs}
+  metadata_url: ${oc.env:JUICEFS_METADATA,redis://redis:6379/1}
+  cache_dir: /tmp/jfs-cache
+  cache_size_mb: 10240
+
+# LiteLLM - LLM API Gateway
+litellm:
+  api_base: ${oc.env:LITELLM_API_BASE,http://litellm:4000}
+  api_key: ${oc.env:LITELLM_API_KEY,sk-mlops-dev-key}
+  default_model: ${oc.env:LITELLM_DEFAULT_MODEL,ollama/mistral}
+
+# FiftyOne - Dataset Visualization
+fiftyone:
+  dataset_dir: ${paths.root}/data/fiftyone
+  port: 5151
+  address: "0.0.0.0"
+  database_uri: ${oc.env:FIFTYONE_DATABASE_URI,mongodb://mongodb:27017/fiftyone}
+
+# B2 Storage (legacy)
+b2:
+  bucket_name: ${oc.env:B2_BUCKET_NAME,mlops-data-bucket}
+  local_data_dir: ${paths.data.raw}

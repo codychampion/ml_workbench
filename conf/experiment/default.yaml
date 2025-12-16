@@ -1,0 +1,12 @@
+# =============================================================================
+# Experiment Configuration - Default
+# =============================================================================
+# Default experiment settings.
+# =============================================================================
+
+experiment:
+  name: default
+  description: "Default experiment configuration"
+  tags:
+    - default
+    - development
