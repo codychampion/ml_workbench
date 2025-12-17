@@ -429,3 +429,59 @@ python -m pipelines.infer.run_generation +experiment=tiny_cpu
 - Captioning only: ~1-2GB RAM
 - Generation only: ~2-4GB RAM
 - Full pipeline: ~4-6GB RAM
+
+## Testing
+
+Comprehensive test suite for verifying all services and integrations.
+
+### Quick Start
+
+```bash
+# Install test dependencies
+pip install -r tests/requirements.txt
+
+# Check service status
+python tests/run_tests.py --status
+
+# Run quick health checks
+python tests/run_tests.py --quick
+
+# Run all integration tests
+python tests/run_tests.py
+
+# Run specific test category
+python tests/run_tests.py --category minio
+python tests/run_tests.py --category knowledge
+python tests/run_tests.py --category mlops
+```
+
+### Test Categories
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| `health` | Service health checks | Verify all services are running |
+| `minio` | S3/MinIO integration | Bucket operations, uploads, downloads |
+| `knowledge` | Khoj, CouchDB, Zotero | Knowledge stack functionality |
+| `mlops` | AIM, Prefect, Vault, etc. | MLOps service integrations |
+
+### Running with pytest directly
+
+```bash
+# All integration tests
+pytest tests/integration/ -v -m integration
+
+# Specific test file
+pytest tests/integration/test_services_health.py -v
+
+# Skip slow tests
+pytest tests/integration/ -v -m "not slow"
+
+# Generate HTML report
+pytest tests/integration/ --html=report.html
+```
+
+### Environment Variables
+
+```bash
+SERVICE_HOST=localhost    # Service host (default: localhost)
+```
