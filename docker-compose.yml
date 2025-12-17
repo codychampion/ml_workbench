@@ -66,7 +66,7 @@ services:
 
   # MinIO - S3-compatible object storage (mimics Backblaze B2)
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
     container_name: mlops-minio
     restart: unless-stopped
     ports:
@@ -95,7 +95,7 @@ services:
 
   # MinIO Client - Creates default buckets on startup
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2024-01-16T16-06-34Z
     container_name: mlops-minio-init
     depends_on:
       minio:
@@ -187,7 +187,7 @@ services:
   # ===========================================================================
 
   aim:
-    image: aimstack/aim:latest
+    image: aimstack/aim:3.19.3
     container_name: mlops-aim
     restart: unless-stopped
     ports:
@@ -218,7 +218,7 @@ services:
   # ===========================================================================
 
   juicefs-format:
-    image: juicedata/juicefs:latest
+    image: juicedata/juicefs:1.1.2
     container_name: mlops-juicefs-format
     depends_on:
       redis:
@@ -236,7 +236,7 @@ services:
     restart: "no"
 
   juicefs-mount:
-    image: juicedata/juicefs:latest
+    image: juicedata/juicefs:1.1.2
     container_name: mlops-juicefs
     restart: unless-stopped
     depends_on:
@@ -273,7 +273,7 @@ services:
   # ===========================================================================
 
   label-studio:
-    image: heartexlabs/label-studio:latest
+    image: heartexlabs/label-studio:1.11.0
     container_name: mlops-label-studio
     restart: unless-stopped
     depends_on:
@@ -465,7 +465,7 @@ services:
   # ===========================================================================
 
   vault:
-    image: hashicorp/vault:1.15
+    image: hashicorp/vault:1.15.4
     container_name: mlops-vault
     restart: unless-stopped
     ports:
@@ -531,7 +531,7 @@ services:
   # ===========================================================================
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    image: ghcr.io/berriai/litellm:main-v1.55.8
     container_name: mlops-litellm
     restart: unless-stopped
     depends_on:
@@ -570,7 +570,7 @@ services:
 
   # Khoj - AI Personal Assistant (searches notes, papers, conversations)
   khoj:
-    image: ghcr.io/khoj-ai/khoj:latest
+    image: ghcr.io/khoj-ai/khoj:1.29.3
     container_name: mlops-khoj
     restart: unless-stopped
     depends_on:
@@ -612,7 +612,7 @@ services:
 
   # CouchDB - Backend for Obsidian LiveSync plugin
   obsidian-couchdb:
-    image: couchdb:3
+    image: couchdb:3.3.3
     container_name: mlops-obsidian-couchdb
     restart: unless-stopped
     ports:
