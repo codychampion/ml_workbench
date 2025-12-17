@@ -218,7 +218,7 @@ services:
   # ===========================================================================
 
   juicefs-format:
-    image: juicedata/juicefs:1.1.2
+    image: juicedata/juicefs:latest
     container_name: mlops-juicefs-format
     depends_on:
       redis:
@@ -236,7 +236,7 @@ services:
     restart: "no"
 
   juicefs-mount:
-    image: juicedata/juicefs:1.1.2
+    image: juicedata/juicefs:latest
     container_name: mlops-juicefs
     restart: unless-stopped
     depends_on:
