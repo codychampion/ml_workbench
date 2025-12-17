@@ -89,6 +89,32 @@ MODELS = {
         supports_finetuning=True,
         description="ViT + GPT-2 - lightweight, fast inference"
     ),
+
+    # =========================================================================
+    # TINY CPU MODELS - For testing on low-resource machines
+    # =========================================================================
+    # These models are optimized for CPU inference on machines with limited RAM.
+    # Use for development/testing before scaling to larger models.
+
+    "tiny-vit-gpt2": ModelConfig(
+        name="tiny-vit-gpt2",
+        model_id="nlpconnect/vit-gpt2-image-captioning",
+        model_type="vit-gpt2",
+        supports_finetuning=True,
+        max_length=30,  # Shorter outputs for speed
+        num_beams=2,    # Fewer beams for speed
+        description="TINY: ~240M params, ~1GB RAM, CPU-friendly"
+    ),
+
+    "tiny-git": ModelConfig(
+        name="tiny-git",
+        model_id="microsoft/git-base",
+        model_type="git",
+        supports_finetuning=True,
+        max_length=30,
+        num_beams=2,
+        description="TINY: ~180M params, ~800MB RAM, fastest option"
+    ),
 }
 
 

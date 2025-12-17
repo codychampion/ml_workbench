@@ -20,7 +20,9 @@
 #   - HashiCorp Vault - Secrets management
 #   - LiteLLM     - LLM API gateway
 #   - FiftyOne    - Dataset visualization
-#   - SiYuan      - Knowledge base (Zettelkasten, papers, notes)
+#   - Khoj        - AI assistant for searching notes/papers
+#   - Obsidian    - Knowledge base (via CouchDB LiveSync)
+#   - Zotero      - Reference manager for academic papers
 #
 # Storage Strategy:
 #   MinIO provides S3-compatible API locally. To migrate to cloud:
@@ -45,7 +47,9 @@
 #   - Spotlight:           http://localhost:8083
 #   - Great Expectations:  http://localhost:8084
 #   - FiftyOne:            http://localhost:5151
-#   - SiYuan:              http://localhost:6806 (code: mlops-dev)
+#   - Khoj:                http://localhost:42110
+#   - Obsidian LiveSync:   http://localhost:5984/_utils (CouchDB)
+#   - Zotero:              http://localhost:8085
 #   - ComfyUI:             http://localhost:8188
 #   - Vault:               http://localhost:8200
 #   - LiteLLM:             http://localhost:4000
@@ -558,26 +562,114 @@ services:
           memory: 1G
 
   # ===========================================================================
-  # KNOWLEDGE BASE - SiYuan (Zettelkasten-style notes)
+  # KNOWLEDGE BASE - Khoj + Obsidian + Zotero Stack
   # ===========================================================================
-  # Self-hosted note-taking for research papers, experiment notes, and docs.
-  # Supports Markdown, backlinks, graph view, and S3 sync.
+  # - Khoj: AI assistant that searches and chats with your notes/papers
+  # - Obsidian LiveSync: CouchDB backend for Obsidian sync across devices
+  # - Zotero: Reference manager for academic papers
 
-  siyuan:
-    image: b3log/siyuan:latest
-    container_name: mlops-siyuan
+  # Khoj - AI Personal Assistant (searches notes, papers, conversations)
+  khoj:
+    image: ghcr.io/khoj-ai/khoj:latest
+    container_name: mlops-khoj
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "42110:42110"
+    volumes:
+      - khoj-data:/root/.khoj
+      - obsidian-vault:/data/obsidian:ro
+      - zotero-data:/data/zotero:ro
+      - ./outputs:/data/outputs:ro
+      - ./knowledge:/data/knowledge
+    environment:
+      - KHOJ_ADMIN_EMAIL=admin@mlops.local
+      - KHOJ_ADMIN_PASSWORD=mlops-dev-password
+      - KHOJ_DEBUG=false
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=mlops
+      - POSTGRES_PASSWORD=mlops_dev_password
+      - POSTGRES_DB=khoj
+      # LiteLLM for AI chat
+      - OPENAI_API_BASE=http://litellm:4000/v1
+      - OPENAI_API_KEY=sk-mlops-dev-key
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:42110/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  # CouchDB - Backend for Obsidian LiveSync plugin
+  obsidian-couchdb:
+    image: couchdb:3
+    container_name: mlops-obsidian-couchdb
     restart: unless-stopped
     ports:
-      - "6806:6806"
+      - "5984:5984"
     volumes:
-      - siyuan-data:/siyuan/workspace
-      - ./outputs:/siyuan/workspace/data/assets/outputs:ro
-      - ./data:/siyuan/workspace/data/assets/data:ro
+      - couchdb-data:/opt/couchdb/data
+      - ./docker/couchdb/local.ini:/opt/couchdb/etc/local.d/local.ini:ro
     environment:
-      - SIYUAN_ACCESS_AUTH_CODE=mlops-dev
-    user: "1000:1000"
+      - COUCHDB_USER=obsidian
+      - COUCHDB_PASSWORD=mlops-dev-password
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6806/api/system/ping"]
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mlops-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # Obsidian Vault Storage (shared volume for Khoj indexing)
+  obsidian-init:
+    image: alpine:latest
+    container_name: mlops-obsidian-init
+    volumes:
+      - obsidian-vault:/vault
+    command: >
+      /bin/sh -c "
+      mkdir -p /vault/.obsidian;
+      echo 'Obsidian vault initialized';
+      "
+    networks:
+      - mlops-network
+    restart: "no"
+
+  # Zotero Web Server (translation-server for paper import)
+  zotero:
+    build:
+      context: .
+      dockerfile: services/zotero/Dockerfile
+    image: mlops-zotero:latest
+    container_name: mlops-zotero
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    volumes:
+      - zotero-data:/data/zotero
+      - zotero-storage:/data/storage
+    environment:
+      - ZOTERO_DATA_DIR=/data/zotero
+      - ZOTERO_STORAGE_DIR=/data/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -997,7 +1089,11 @@ volumes:
   comfyui-output:
   comfyui-input:
   huggingface-cache:
-  siyuan-data:
+  khoj-data:
+  obsidian-vault:
+  couchdb-data:
+  zotero-data:
+  zotero-storage:
   great-expectations-data:
 
 # =============================================================================

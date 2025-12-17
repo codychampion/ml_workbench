@@ -55,7 +55,7 @@ ml_workbench/
 | Annotation | **Label Studio**, **CVAT** | Images/text and video, S3-backed |
 | Dataset Viz | **FiftyOne**, **Spotlight** | S3-backed for remote datasets |
 | Image Generation | **ComfyUI** | Full ComfyUI with S3 model sync |
-| Knowledge Base | **SiYuan** | Zettelkasten, papers, experiment notes |
+| Knowledge Base | **Khoj + Obsidian + Zotero** | AI search, notes, paper management |
 
 ## Common Patterns
 
@@ -233,7 +233,9 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 | Spotlight | http://localhost:8083 | - |
 | Great Expectations | http://localhost:8084 | - |
 | FiftyOne | http://localhost:5151 | S3-backed |
-| SiYuan | http://localhost:6806 | Code: mlops-dev |
+| Khoj | http://localhost:42110 | admin@mlops.local / mlops-dev-password |
+| Obsidian CouchDB | http://localhost:5984/_utils | obsidian / mlops-dev-password |
+| Zotero | http://localhost:8085 | Paper management API |
 | ComfyUI | http://localhost:8188 | S3 model sync |
 | Vault | http://localhost:8200 | Token: mlops-dev-token |
 | LiteLLM | http://localhost:4000 | - |
@@ -252,11 +254,12 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 3. **NO hardcoded credentials** - ALL secrets in Vault (utils/vault.py)
 4. **S3Client over B2Client** - B2Client is legacy
 5. **Hydra for all config** - Don't use config.py for new code
-6. **SiYuan for notes** - Use for papers, experiment notes, knowledge base
+6. **Knowledge Stack** - Khoj (AI search), Obsidian (notes), Zotero (papers)
 7. **DVC for data versioning** - Use `dvc.yaml` and `params.yaml` for data pipelines
 8. **Prefect for orchestration** - All pipelines have `@flow` decorators
 9. **Model Registry** - Register models with `register_model()` after training
 10. **Great Expectations** - Validate datasets before training at http://localhost:8084
+11. **Tiny CPU Models** - Use `+experiment=tiny_cpu` for low-resource testing
 
 ## S3 Integration
 
@@ -317,3 +320,112 @@ Initialize with: `python -c "from utils import init_vault_secrets; init_vault_se
 - **Per-run overrides**: `python script.py train.epochs=10 train.lr=1e-4`
 - **Multi-run sweeps**: `python script.py -m train.lr=1e-3,1e-4,1e-5`
 - **New experiment preset**: Create `conf/experiment/<name>.yaml`
+
+## Knowledge Base (Khoj + Obsidian + Zotero)
+
+The knowledge stack provides AI-powered search across notes, papers, and experiments:
+
+### Khoj (AI Search Assistant)
+```python
+# Khoj indexes Obsidian vault, Zotero papers, and AIM experiments
+# Access at http://localhost:42110
+
+# Configure data sources in Khoj UI:
+# - Obsidian: /data/obsidian (read-only mount)
+# - Zotero: /data/zotero (paper metadata)
+# - Experiments: /data/outputs (AIM exports)
+```
+
+### Obsidian Sync
+```bash
+# Obsidian uses CouchDB for LiveSync across devices
+# CouchDB UI: http://localhost:5984/_utils
+
+# In Obsidian app, install "Self-hosted LiveSync" plugin
+# Configure with:
+#   URI: http://localhost:5984
+#   Username: obsidian
+#   Password: mlops-dev-password
+#   Database: obsidian
+```
+
+### Zotero (Paper Management)
+```python
+import requests
+
+# Add paper from URL (extracts metadata automatically)
+resp = requests.post("http://localhost:8085/api/papers", json={
+    "url": "https://arxiv.org/abs/2303.08774"
+})
+
+# List papers
+papers = requests.get("http://localhost:8085/api/papers").json()
+
+# Export as BibTeX
+bibtex = requests.get("http://localhost:8085/api/export/bibtex").text
+
+# Export as Markdown (for Obsidian)
+md = requests.get("http://localhost:8085/api/export/markdown").text
+```
+
+## AIM Report Ingestion
+
+Export AIM experiments to the knowledge base for AI-powered search:
+
+```bash
+# Export all experiments to Obsidian-compatible markdown
+python -m utils.aim_ingestion
+
+# Export specific run
+python -m utils.aim_ingestion --run abc123
+
+# Export last 7 days
+python -m utils.aim_ingestion --since 7d
+
+# Watch for new experiments (daemon mode)
+python -m utils.aim_ingestion --watch --interval 60
+```
+
+Exported experiments appear in `knowledge/experiments/` and are indexed by Khoj.
+
+## Git Hooks (PR Summaries)
+
+Track code changes with AI-generated summaries:
+
+```bash
+# Install the post-merge hook
+ln -sf ../../hooks/post-merge .git/hooks/post-merge
+
+# Generate AI summary of recent changes
+python -m hooks.summarize_pr HEAD~5..HEAD
+
+# Summarize a GitHub PR
+python -m hooks.summarize_pr --pr 123
+
+# Summaries are saved to knowledge/git-summaries/
+```
+
+## Tiny CPU Models
+
+For testing on low-resource machines (small laptops, CI):
+
+```bash
+# Use tiny model preset for all pipelines
+python -m pipelines.annotate.auto_caption +experiment=tiny_cpu
+python -m pipelines.infer.run_generation +experiment=tiny_cpu
+```
+
+### Available Tiny Models
+
+| Task | Model | Params | RAM |
+|------|-------|--------|-----|
+| Captioning | `tiny-git` (microsoft/git-base) | ~180M | ~800MB |
+| Captioning | `tiny-vit-gpt2` | ~240M | ~1GB |
+| Generation | `tiny-sd` (small-stable-diffusion-v0) | ~430M | ~2GB |
+| Classification | `convnext-tiny` | ~28M | ~120MB |
+
+### Resource Requirements
+
+- Captioning only: ~1-2GB RAM
+- Generation only: ~2-4GB RAM
+- Full pipeline: ~4-6GB RAM
