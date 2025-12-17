@@ -1067,6 +1067,106 @@ services:
           cpus: '4'
           memory: 8G
 
+  # ===========================================================================
+  # INTEGRATION TESTS
+  # ===========================================================================
+  # Runs automatically after all services are healthy.
+  # Usage:
+  #   docker-compose up -d && docker-compose run --rm test
+  #   docker-compose run --rm test                    # Full suite
+  #   docker-compose run --rm -e TEST_MODE=quick test # Quick health checks
+  #   docker-compose run --rm -e TEST_MODE=minio test # Specific category
+
+  test:
+    build:
+      context: .
+      dockerfile: tests/docker/Dockerfile
+    image: mlops-test:latest
+    container_name: mlops-test-runner
+    depends_on:
+      minio:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      aim:
+        condition: service_healthy
+      prefect-server:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+    volumes:
+      - ./tests:/workspace/tests:ro
+      - ./pytest.ini:/workspace/pytest.ini:ro
+    environment:
+      # Use Docker network hostnames for service access
+      - MINIO_HOST=minio
+      - MONGODB_HOST=mongodb
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+      - AIM_HOST=aim
+      - PREFECT_HOST=prefect-server
+      - VAULT_HOST=vault
+      - LITELLM_HOST=litellm
+      - KHOJ_HOST=khoj
+      - COUCHDB_HOST=obsidian-couchdb
+      - ZOTERO_HOST=zotero
+      - GE_HOST=great-expectations
+      - LABEL_STUDIO_HOST=label-studio
+      - CVAT_HOST=cvat-server
+      - FIFTYONE_HOST=fiftyone
+      - SPOTLIGHT_HOST=spotlight
+      - COMFYUI_HOST=comfyui
+      - TEST_MODE=${TEST_MODE:-full}
+      - MAX_WAIT=300
+      - WAIT_INTERVAL=5
+    networks:
+      - mlops-network
+    profiles:
+      - test
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+
+  # Quick test runner (health checks only)
+  test-quick:
+    build:
+      context: .
+      dockerfile: tests/docker/Dockerfile
+    image: mlops-test:latest
+    container_name: mlops-test-quick
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./tests:/workspace/tests:ro
+      - ./pytest.ini:/workspace/pytest.ini:ro
+    environment:
+      # Use Docker network hostnames for service access
+      - MINIO_HOST=minio
+      - MONGODB_HOST=mongodb
+      - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
+      - AIM_HOST=aim
+      - PREFECT_HOST=prefect-server
+      - VAULT_HOST=vault
+      - TEST_MODE=quick
+      - MAX_WAIT=60
+    networks:
+      - mlops-network
+    profiles:
+      - test
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
