@@ -570,7 +570,7 @@ services:
 
   # Khoj - AI Personal Assistant (searches notes, papers, conversations)
   khoj:
-    image: ghcr.io/khoj-ai/khoj:1.29.3
+    image: ghcr.io/khoj-ai/khoj:latest
     container_name: mlops-khoj
     restart: unless-stopped
     depends_on:
