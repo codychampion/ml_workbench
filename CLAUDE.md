@@ -46,15 +46,12 @@ ml_workbench/
 | Data Versioning | **DVC** | Git for data, tracks datasets/models |
 | Experiment Tracking | **AIM** | Self-hosted, replaces W&B |
 | Model Registry | **AIM + S3** | Version, store, and promote models |
-| Data Quality | **Great Expectations** | Data validation and quality checks |
 | Object Storage | **MinIO** → B2/S3 | S3-compatible, cloud-portable |
 | Notebooks | **Marimo** | Reactive .py notebooks, NOT Jupyter |
-| Distributed Storage | **JuiceFS** | Redis-backed |
 | Secrets | **HashiCorp Vault** | ALL secrets go here |
 | LLM Gateway | **LiteLLM** | Unified API for multiple LLMs |
-| Annotation | **Label Studio**, **CVAT** | Images/text and video, S3-backed |
-| Dataset Viz | **FiftyOne**, **Spotlight** | S3-backed for remote datasets |
-| Image Generation | **ComfyUI** | Full ComfyUI with S3 model sync |
+| Annotation | **Label Studio** | Images/text labeling, S3-backed |
+| Dataset Viz | **FiftyOne** | S3-backed for remote datasets |
 | Knowledge Base | **Khoj + Obsidian + Zotero** | AI search, notes, paper management |
 
 ## Common Patterns
@@ -146,29 +143,6 @@ for model in list_models():
     print(f"{model.name}@{model.latest_version}")
 ```
 
-### Data Validation (Great Expectations)
-```python
-# Via REST API (http://localhost:8084)
-import requests
-
-# Validate a dataset
-response = requests.post("http://localhost:8084/api/validate", json={
-    "datasource": "minio_data",
-    "asset": "datasets/train.csv",
-    "suite": "image_dataset"
-})
-print(response.json()["success"])  # True/False
-
-# Create expectation suite
-requests.post("http://localhost:8084/api/expectations", json={
-    "name": "my_dataset",
-    "expectations": [
-        {"type": "expect_column_to_exist", "column": "filepath"},
-        {"type": "expect_column_values_to_not_be_null", "column": "caption"}
-    ]
-})
-```
-
 ### Vault Secrets (ALL credentials go here)
 ```python
 from utils import get_secret, get_api_key, get_s3_credentials, VaultClient
@@ -229,14 +203,10 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 | AIM | http://localhost:43800 | - |
 | Prefect | http://localhost:4200 | - |
 | Label Studio | http://localhost:8081 | S3-backed |
-| CVAT | http://localhost:8082 | S3-backed |
-| Spotlight | http://localhost:8083 | - |
-| Great Expectations | http://localhost:8084 | - |
 | FiftyOne | http://localhost:5151 | S3-backed |
 | Khoj | http://localhost:42110 | admin@mlops.local / mlops-dev-password |
 | Obsidian CouchDB | http://localhost:5984/_utils | obsidian / mlops-dev-password |
 | Zotero | http://localhost:8085 | Paper management API |
-| ComfyUI | http://localhost:8188 | S3 model sync |
 | Vault | http://localhost:8200 | Token: mlops-dev-token |
 | LiteLLM | http://localhost:4000 | - |
 
@@ -258,16 +228,13 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 7. **DVC for data versioning** - Use `dvc.yaml` and `params.yaml` for data pipelines
 8. **Prefect for orchestration** - All pipelines have `@flow` decorators
 9. **Model Registry** - Register models with `register_model()` after training
-10. **Great Expectations** - Validate datasets before training at http://localhost:8084
-11. **Tiny CPU Models** - Use `+experiment=tiny_cpu` for low-resource testing
+10. **Tiny CPU Models** - Use `+experiment=tiny_cpu` for low-resource testing
 
 ## S3 Integration
 
 All annotation and visualization tools connect to MinIO:
 - **Label Studio**: Import/export datasets from `s3://mlops-data/`
-- **CVAT**: Import videos from S3, export annotations to S3
 - **FiftyOne**: Load datasets directly from S3 URLs
-- **ComfyUI**: Auto-syncs models from `s3://mlops-models/comfyui/`
 
 To use S3 storage in annotation tools, configure cloud storage in their respective UIs pointing to `http://minio:9000`.
 
