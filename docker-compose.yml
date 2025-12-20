@@ -80,6 +80,8 @@ services:
       start_period: 10s
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -105,6 +107,8 @@ services:
     networks:
       - mlops-network
     restart: "no"
+    profiles:
+      - core
 
   # MongoDB - Database for FiftyOne and metadata
   mongodb:
@@ -123,6 +127,8 @@ services:
       start_period: 20s
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -144,6 +150,8 @@ services:
       retries: 3
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -169,6 +177,8 @@ services:
       retries: 5
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -200,6 +210,8 @@ services:
       start_period: 30s
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -240,6 +252,8 @@ services:
       start_period: 60s
     networks:
       - mlops-network
+    profiles:
+      - tools
     deploy:
       resources:
         limits:
@@ -271,6 +285,8 @@ services:
       start_period: 10s
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -303,6 +319,8 @@ services:
       start_period: 30s
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -338,6 +356,8 @@ services:
       start_period: 30s
     networks:
       - mlops-network
+    profiles:
+      - core
     deploy:
       resources:
         limits:
@@ -387,6 +407,8 @@ services:
       start_period: 30s
     networks:
       - mlops-network
+    profiles:
+      - tools
     deploy:
       resources:
         limits:
@@ -413,6 +435,8 @@ services:
       start_period: 10s
     networks:
       - mlops-network
+    profiles:
+      - tools
     deploy:
       resources:
         limits:
@@ -433,6 +457,8 @@ services:
     networks:
       - mlops-network
     restart: "no"
+    profiles:
+      - tools
 
   # Zotero Web Server (translation-server for paper import)
   zotero:
@@ -458,6 +484,8 @@ services:
       start_period: 20s
     networks:
       - mlops-network
+    profiles:
+      - tools
     deploy:
       resources:
         limits:
@@ -503,6 +531,8 @@ services:
       start_period: 30s
     networks:
       - mlops-network
+    profiles:
+      - tools
     deploy:
       resources:
         limits:
