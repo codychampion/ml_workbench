@@ -402,7 +402,6 @@ services:
       - "5984:5984"
     volumes:
       - couchdb-data:/opt/couchdb/data
-      - ./docker/couchdb/local.ini:/opt/couchdb/etc/local.d/local.ini:ro
     environment:
       - COUCHDB_USER=obsidian
       - COUCHDB_PASSWORD=mlops-dev-password
