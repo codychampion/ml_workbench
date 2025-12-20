@@ -1,0 +1,31 @@
+# =============================================================================
+# Experiment Configuration - LoRA Captioner Fine-tuning
+# =============================================================================
+# Configuration for fine-tuning image captioning models with LoRA.
+# =============================================================================
+
+# Override defaults
+defaults:
+  - default
+
+experiment:
+  name: lora-captioner
+  description: "Fine-tune BLIP captioner with LoRA adapters"
+  tags:
+    - lora
+    - captioner
+    - blip
+    - fine-tuning
+
+# Training overrides
+train:
+  epochs: 5
+  batch_size: 8
+  learning_rate: 2e-4
+
+lora:
+  rank: 16
+  alpha: 32
+
+model:
+  name: blip-base

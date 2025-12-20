@@ -1,0 +1,61 @@
+# =============================================================================
+# Experiment Preset: Tiny CPU Models
+# =============================================================================
+# Use this preset for testing on low-resource machines (small laptops, CI, etc.)
+# All models are optimized for CPU inference with minimal RAM usage.
+#
+# Usage:
+#   python -m pipelines.annotate.auto_caption +experiment=tiny_cpu
+#   python -m pipelines.infer.run_generation +experiment=tiny_cpu
+#
+
+# Override annotation settings for tiny models
+annotate:
+  caption:
+    model: tiny-git  # ~180M params, ~800MB RAM
+    max_length: 30
+    num_beams: 2
+
+# Override inference settings for tiny models
+infer:
+  generation:
+    width: 256       # Smaller images
+    height: 256
+    num_inference_steps: 4  # Fewer steps
+    guidance_scale: 5.0
+  model:
+    type: tiny-sd    # Use tiny stable diffusion
+
+# Override training for tiny experiments
+train:
+  epochs: 2
+  batch_size: 1
+  gradient_accumulation_steps: 4
+  max_steps: 100
+  save_steps: 50
+  logging_steps: 10
+
+# Resource limits
+resources:
+  max_memory_mb: 2048
+  cpu_only: true
+  num_workers: 1
+
+# Tiny model registry
+# ====================
+# Captioning (pick one):
+#   - tiny-git:      microsoft/git-base (~180M params, ~800MB)
+#   - tiny-vit-gpt2: nlpconnect/vit-gpt2-image-captioning (~240M params, ~1GB)
+#
+# Image Generation (pick one):
+#   - tiny-sd:       OFA-Sys/small-stable-diffusion-v0 (~430M params, ~2GB)
+#   - bk-sdm-tiny:   nota-ai/bk-sdm-tiny (~430M params, 50% smaller UNet)
+#   - segmind-tiny:  segmind/small-sd (~370M params, 55% smaller)
+#
+# Classification:
+#   - convnext-tiny: facebook/convnext-tiny-224 (~28M params, ~120MB)
+#
+# RAM Requirements (approximate):
+#   - Captioning only:     ~1-2GB
+#   - Generation only:     ~2-4GB
+#   - Full pipeline:       ~4-6GB

@@ -1,0 +1,22 @@
+# =============================================================================
+# Pipeline Configuration - Inference
+# =============================================================================
+
+infer:
+  # Generation settings
+  generation:
+    width: 256
+    height: 256
+    num_inference_steps: 4
+    guidance_scale: 7.5
+
+  # Model settings
+  model:
+    path: null  # Path to custom model, or null for default
+    type: symbolic  # symbolic, flux, sdxl
+
+  # Output settings
+  output:
+    dir: ${paths.outputs}/generations
+    format: png
+    save_metadata: true

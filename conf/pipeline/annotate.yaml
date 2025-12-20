@@ -1,0 +1,23 @@
+# =============================================================================
+# Pipeline Configuration - Annotation
+# =============================================================================
+
+annotate:
+  # Captioning settings
+  caption:
+    model: blip-base
+    max_length: 50
+    num_beams: 4
+    prompt: null  # Optional prompt for conditional captioning
+
+  # Output settings
+  output:
+    format: txt  # txt, json, jsonl
+    recursive: true
+    overwrite: false
+
+  # FiftyOne dataset creation
+  fiftyone:
+    create_dataset: true
+    dataset_name: "collected_${now:%Y%m%d}"
+    include_captions: true

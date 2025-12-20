@@ -1,0 +1,48 @@
+# =============================================================================
+# MLOps PyTorch CPU Image
+# =============================================================================
+# Extends base image with PyTorch (CPU-only) for development.
+# No CUDA dependencies - optimized for local/CI environments.
+#
+# Build: docker build -t mlops-torch-cpu:latest -f docker/base/Dockerfile.torch-cpu .
+# =============================================================================
+
+FROM python:3.12-slim
+
+LABEL maintainer="MLOps Team"
+LABEL description="MLOps PyTorch CPU image"
+LABEL version="2.0.0"
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /workspace
+
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl tini libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
+    && mkdir -p /workspace && chown -R mlops:mlops /workspace
+
+# Install PyTorch CPU and ML libraries
+RUN uv pip install --system --no-cache \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch torchvision torchaudio \
+    numpy scipy scikit-learn pandas Pillow \
+    boto3 "dvc[s3]>=3.0.0"
+
+ENV COMPUTE_DEVICE=cpu
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+
+# Verify installation
+RUN python -c "import torch; print(f'PyTorch {torch.__version__} (CPU)')"
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["/bin/bash"]

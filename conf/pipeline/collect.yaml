@@ -1,0 +1,29 @@
+# =============================================================================
+# Pipeline Configuration - Data Collection
+# =============================================================================
+
+collect:
+  # Source settings
+  source:
+    type: reddit  # reddit, url, local
+    subreddit: earthporn
+    limit: 100
+    sort: top
+    time_filter: week
+
+  # Filter settings
+  filter:
+    min_width: 512
+    min_height: 512
+    max_size_mb: 50
+    allowed_extensions:
+      - .jpg
+      - .jpeg
+      - .png
+      - .webp
+
+  # Output settings
+  output:
+    dir: ${paths.data.collected}
+    save_metadata: true
+    organize_by_date: false

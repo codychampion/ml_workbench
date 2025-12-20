@@ -1,0 +1,23 @@
+# =============================================================================
+# Pipeline Configuration - Evaluation
+# =============================================================================
+
+evaluate:
+  # Metrics settings
+  metrics:
+    - bleu
+    - rouge
+    - meteor
+
+  # Benchmark settings
+  benchmark:
+    enabled: true
+    num_samples: 100
+    warmup_runs: 5
+    measure_memory: true
+
+  # Output settings
+  output:
+    dir: ${paths.outputs}/evaluation
+    save_predictions: true
+    generate_report: true

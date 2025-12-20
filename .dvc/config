@@ -1,0 +1,16 @@
+[core]
+    remote = minio
+    autostage = true
+
+[remote "minio"]
+    url = s3://mlops-data/dvc
+    endpointurl = http://localhost:9000
+    access_key_id = mlops-admin
+    secret_access_key = mlops-dev-password
+
+# Production remotes (uncomment to use)
+# [remote "b2"]
+#     url = s3://your-bucket/dvc
+#     endpointurl = https://s3.us-west-000.backblazeb2.com
+# [remote "aws"]
+#     url = s3://your-bucket/dvc

@@ -1,0 +1,163 @@
+# =============================================================================
+# Docker Compose GPU Override
+# =============================================================================
+# PHASE 2/3: GPU configuration for NVIDIA Container Toolkit
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Or set as default:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+#
+# Requirements:
+#   - NVIDIA GPU with CUDA support
+#   - NVIDIA Container Toolkit installed
+#   - nvidia-docker2 or docker with GPU support
+#
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # GPU-enabled Base Image
+  # ---------------------------------------------------------------------------
+
+  torch-gpu:
+    build:
+      context: .
+      dockerfile: docker/base/Dockerfile.torch-gpu
+    image: mlops-torch-gpu:latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # GPU-enabled ComfyUI
+  # ---------------------------------------------------------------------------
+
+  comfyui:
+    build:
+      args:
+        BASE_IMAGE: mlops-torch-gpu:latest
+    environment:
+      - COMPUTE_DEVICE=cuda
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # GPU-enabled Workers
+  # ---------------------------------------------------------------------------
+
+  flux-gen:
+    build:
+      args:
+        BASE_IMAGE: mlops-torch-gpu:latest
+    environment:
+      - COMPUTE_DEVICE=cuda
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        limits:
+          cpus: '8'
+          memory: 32G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  lora-trainer:
+    build:
+      args:
+        BASE_IMAGE: mlops-torch-gpu:latest
+    environment:
+      - COMPUTE_DEVICE=cuda
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+    deploy:
+      resources:
+        limits:
+          cpus: '8'
+          memory: 32G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  adv-patches:
+    build:
+      args:
+        BASE_IMAGE: mlops-torch-gpu:latest
+    environment:
+      - COMPUTE_DEVICE=cuda
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # GPU Development Shell
+  # ---------------------------------------------------------------------------
+
+  dev:
+    build:
+      args:
+        BASE_IMAGE: mlops-torch-gpu:latest
+    environment:
+      - COMPUTE_DEVICE=cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+# =============================================================================
+# PHASE 2/3 TODO: Multi-GPU Configuration
+# =============================================================================
+#
+# For distributed training across multiple GPUs:
+#
+#   lora-trainer-distributed:
+#     build:
+#       context: .
+#       dockerfile: pipelines/train/Dockerfile
+#       args:
+#         BASE_IMAGE: mlops-torch-gpu:latest
+#     environment:
+#       - COMPUTE_DEVICE=cuda
+#       - CUDA_VISIBLE_DEVICES=0,1,2,3
+#       - WORLD_SIZE=4
+#       - MASTER_ADDR=localhost
+#       - MASTER_PORT=29500
+#     deploy:
+#       resources:
+#         reservations:
+#           devices:
+#             - driver: nvidia
+#               count: 4
+#               capabilities: [gpu]
+#
+# =============================================================================

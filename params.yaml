@@ -1,0 +1,71 @@
+# =============================================================================
+# DVC Pipeline Parameters - MLOps Workbench
+# =============================================================================
+#
+# Modify these values to control pipeline behavior
+# Run: dvc repro <stage>
+#
+# =============================================================================
+
+# ===========================================================================
+# STAGE 1: Data Collection (collect container)
+# ===========================================================================
+collect:
+  subreddit: earthporn
+  limit: 100
+  sort: top              # hot, new, top, rising
+  time: week             # hour, day, week, month, year, all
+
+# ===========================================================================
+# STAGE 2: Data Annotation (annotate container)
+# ===========================================================================
+annotate:
+  model: blip-base       # blip-base, blip-large, blip2-opt, git-base
+  output_format: txt     # txt, json, jsonl
+
+dataset:
+  name: training-dataset
+
+# ===========================================================================
+# STAGE 3: Model Training (train container)
+# ===========================================================================
+train:
+  # Captioner fine-tuning
+  captioner:
+    base_model: blip-base
+    output_name: my-captioner-v1
+    epochs: 3
+    batch_size: 4
+    learning_rate: 1e-4
+    lora_rank: 8
+
+  # LoRA/SDXL training
+  lora:
+    base_model: stabilityai/stable-diffusion-xl-base-1.0
+    output_name: my-lora-v1
+    epochs: 10
+    batch_size: 1
+    learning_rate: 1e-4
+    rank: 16
+    alpha: 32
+
+# ===========================================================================
+# STAGE 4: Model Evaluation (evaluate container)
+# ===========================================================================
+evaluate:
+  task: captioning       # captioning, classification
+  model_name: my-captioner-v1
+
+  captioner:
+    model: blip-base
+    num_runs: 100
+
+# ===========================================================================
+# STAGE 5: Model Inference (infer container)
+# ===========================================================================
+infer:
+  model: stabilityai/stable-diffusion-xl-base-1.0
+  lora_path: models/lora/my-lora-v1
+  prompt: "a beautiful landscape"
+  num_images: 4
+  guidance_scale: 7.5

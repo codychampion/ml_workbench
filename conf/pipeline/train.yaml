@@ -1,0 +1,53 @@
+# =============================================================================
+# Pipeline Configuration - Training
+# =============================================================================
+
+# Training settings
+train:
+  epochs: 3
+  batch_size: 4
+  learning_rate: 1e-4
+  warmup_steps: 100
+  save_steps: 500
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  weight_decay: 0.01
+
+  # Early stopping
+  early_stopping:
+    enabled: false
+    patience: 5
+    min_delta: 0.001
+
+# LoRA settings
+lora:
+  enabled: true
+  rank: 8
+  alpha: 16
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - v_proj
+    - k_proj
+    - out_proj
+
+# Model settings
+model:
+  name: blip-base
+  type: blip
+  pretrained: true
+  freeze_base: true
+
+# Dataset settings
+dataset:
+  path: ${paths.data.collected}
+  max_length: 50
+  caption_ext: ".txt"
+  train_split: 0.9
+  shuffle: true
+
+# Output settings
+output:
+  dir: ${paths.outputs}/training
+  save_best: true
+  save_last: true

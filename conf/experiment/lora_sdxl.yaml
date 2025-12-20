@@ -1,0 +1,37 @@
+# =============================================================================
+# Experiment Configuration - LoRA for SDXL
+# =============================================================================
+# Configuration for training LoRA adapters for Stable Diffusion XL.
+# =============================================================================
+
+defaults:
+  - default
+
+experiment:
+  name: lora-sdxl
+  description: "Train LoRA adapters for Stable Diffusion XL"
+  tags:
+    - lora
+    - sdxl
+    - diffusion
+    - image-generation
+
+# Training overrides for diffusion models
+train:
+  epochs: 100
+  batch_size: 1
+  learning_rate: 1e-4
+  gradient_accumulation_steps: 4
+
+lora:
+  rank: 32
+  alpha: 64
+  target_modules:
+    - to_k
+    - to_q
+    - to_v
+    - to_out.0
+
+model:
+  name: stabilityai/stable-diffusion-xl-base-1.0
+  type: sdxl
