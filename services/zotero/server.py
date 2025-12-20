@@ -71,6 +71,29 @@ def generate_paper_id(title: str, doi: str = None) -> str:
     return hashlib.sha256(title.encode()).hexdigest()[:12]
 
 
+@app.route("/", methods=["GET"])
+def index():
+    """Root endpoint - API documentation."""
+    return jsonify({
+        "service": "Zotero REST API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "GET /": "This documentation",
+            "GET /health": "Health check",
+            "POST /api/translate": "Translate URL to paper metadata",
+            "GET /api/papers": "List all papers",
+            "POST /api/papers": "Add a paper",
+            "GET /api/papers/<id>": "Get paper by ID",
+            "DELETE /api/papers/<id>": "Delete paper",
+            "GET /api/export/bibtex": "Export as BibTeX",
+            "GET /api/export/markdown": "Export as Markdown",
+            "GET /api/stats": "Library statistics"
+        },
+        "documentation": "See CLAUDE.md for usage examples"
+    })
+
+
 @app.route("/health", methods=["GET"])
 def health():
     """Health check endpoint."""

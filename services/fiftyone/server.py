@@ -97,22 +97,29 @@ def main():
 
     try:
         # Launch with the sample dataset if available
+        # Use remote=True to indicate headless mode (no browser expected)
         if dataset is not None:
             session = fo.launch_app(
                 dataset,
                 address=FiftyOneConfig.ADDRESS,
                 port=FiftyOneConfig.PORT,
-                auto=False  # Don't open browser
+                remote=True,  # Headless server mode
+                auto=False    # Don't open browser
             )
         else:
             session = fo.launch_app(
                 address=FiftyOneConfig.ADDRESS,
                 port=FiftyOneConfig.PORT,
+                remote=True,
                 auto=False
             )
 
-        # Keep the server running
-        session.wait()
+        print(f"[FiftyOne] Server started successfully on port {FiftyOneConfig.PORT}")
+
+        # Keep the server running with a simple loop
+        # This is more reliable than session.wait() in headless environments
+        while True:
+            time.sleep(60)
 
     except KeyboardInterrupt:
         print("\n[FiftyOne] Shutting down...")

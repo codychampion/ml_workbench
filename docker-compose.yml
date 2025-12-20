@@ -371,6 +371,9 @@ services:
       - KHOJ_ADMIN_EMAIL=admin@mlops.local
       - KHOJ_ADMIN_PASSWORD=mlops-dev-password
       - KHOJ_DEBUG=false
+      # Django secret key (required for web frontend)
+      - KHOJ_DJANGO_SECRET_KEY=mlops-dev-django-secret-key-change-in-production
+      # PostgreSQL connection
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_USER=mlops
