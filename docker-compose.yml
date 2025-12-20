@@ -13,10 +13,7 @@
 #   - MinIO       - S3-compatible object storage (mimics B2/AWS locally)
 #   - AIM         - Experiment tracking (replaces W&B)
 #   - Prefect     - Workflow orchestration (DAG pipelines)
-#   - JuiceFS     - Distributed storage (Redis-backed)
 #   - Label Studio - Image/text labeling
-#   - CVAT        - Video annotation
-#   - Renumics Spotlight - Data exploration
 #   - HashiCorp Vault - Secrets management
 #   - LiteLLM     - LLM API gateway
 #   - FiftyOne    - Dataset visualization
@@ -43,14 +40,10 @@
 #   - AIM:                 http://localhost:43800
 #   - Prefect:             http://localhost:4200
 #   - Label Studio:        http://localhost:8081
-#   - CVAT:                http://localhost:8082
-#   - Spotlight:           http://localhost:8083
-#   - Great Expectations:  http://localhost:8084
 #   - FiftyOne:            http://localhost:5151
 #   - Khoj:                http://localhost:42110
 #   - Obsidian LiveSync:   http://localhost:5984/_utils (CouchDB)
 #   - Zotero:              http://localhost:8085
-#   - ComfyUI:             http://localhost:8188
 #   - Vault:               http://localhost:8200
 #   - LiteLLM:             http://localhost:4000
 #
@@ -214,61 +207,6 @@ services:
           memory: 2G
 
   # ===========================================================================
-  # DISTRIBUTED STORAGE - JuiceFS
-  # ===========================================================================
-
-  juicefs-format:
-    image: juicedata/juicefs:latest
-    container_name: mlops-juicefs-format
-    depends_on:
-      redis:
-        condition: service_healthy
-    volumes:
-      - juicefs-data:/jfs
-    command: >
-      format
-      --storage file
-      --bucket /jfs
-      redis://redis:6379/1
-      mlops-data
-    networks:
-      - mlops-network
-    restart: "no"
-
-  juicefs-mount:
-    image: juicedata/juicefs:latest
-    container_name: mlops-juicefs
-    restart: unless-stopped
-    depends_on:
-      juicefs-format:
-        condition: service_completed_successfully
-      redis:
-        condition: service_healthy
-    privileged: true
-    volumes:
-      - juicefs-data:/jfs
-      - juicefs-mount:/mnt/jfs:shared
-    command: >
-      mount
-      --background=false
-      --cache-dir=/jfs/cache
-      --cache-size=10240
-      redis://redis:6379/1
-      /mnt/jfs
-    healthcheck:
-      test: ["CMD", "ls", "/mnt/jfs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-
-  # ===========================================================================
   # DATA LABELING - Label Studio (Images/Text) with MinIO S3 Backend
   # ===========================================================================
 
@@ -284,7 +222,6 @@ services:
     volumes:
       - label-studio-data:/label-studio/data
       - ./data:/label-studio/files:ro
-      - juicefs-mount:/label-studio/jfs:ro
     environment:
       - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
       - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files
@@ -308,157 +245,6 @@ services:
         limits:
           cpus: '2'
           memory: 2G
-
-  # ===========================================================================
-  # VIDEO ANNOTATION - CVAT (Computer Vision Annotation Tool) with MinIO S3
-  # ===========================================================================
-
-  cvat-server:
-    image: cvat/server:v2.9.1
-    container_name: mlops-cvat-server
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    volumes:
-      - cvat-data:/home/django/data
-      - cvat-share:/home/django/share
-      - ./data:/home/django/files:ro
-      - juicefs-mount:/home/django/jfs:ro
-    environment:
-      - DJANGO_MODWSGI_EXTRA_ARGS=
-      - ALLOWED_HOSTS=*
-      - CVAT_REDIS_HOST=redis
-      - CVAT_POSTGRES_HOST=postgres
-      - CVAT_POSTGRES_USER=mlops
-      - CVAT_POSTGRES_PASSWORD=mlops_dev_password
-      - CVAT_POSTGRES_DBNAME=cvat
-      # MinIO S3 Cloud Storage for CVAT
-      - CVAT_CLOUD_STORAGE_ENABLED=true
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT_URL=http://minio:9000
-      - AWS_S3_REGION_NAME=us-east-1
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
-
-  cvat-worker-import:
-    image: cvat/server:v2.9.1
-    container_name: mlops-cvat-worker-import
-    restart: unless-stopped
-    depends_on:
-      - cvat-server
-    command: /home/django/wait-for-it.sh cvat-server:8080 -t 0 -- python3 ~/manage.py rqworker -v 3 import
-    volumes:
-      - cvat-data:/home/django/data
-      - cvat-share:/home/django/share
-    environment:
-      - CVAT_REDIS_HOST=redis
-      - CVAT_POSTGRES_HOST=postgres
-      - CVAT_POSTGRES_USER=mlops
-      - CVAT_POSTGRES_PASSWORD=mlops_dev_password
-      - CVAT_POSTGRES_DBNAME=cvat
-      # MinIO S3 access for import worker
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT_URL=http://minio:9000
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 2G
-
-  cvat-worker-export:
-    image: cvat/server:v2.9.1
-    container_name: mlops-cvat-worker-export
-    restart: unless-stopped
-    depends_on:
-      - cvat-server
-    command: /home/django/wait-for-it.sh cvat-server:8080 -t 0 -- python3 ~/manage.py rqworker -v 3 export
-    volumes:
-      - cvat-data:/home/django/data
-      - cvat-share:/home/django/share
-    environment:
-      - CVAT_REDIS_HOST=redis
-      - CVAT_POSTGRES_HOST=postgres
-      - CVAT_POSTGRES_USER=mlops
-      - CVAT_POSTGRES_PASSWORD=mlops_dev_password
-      - CVAT_POSTGRES_DBNAME=cvat
-      # MinIO S3 access for export worker
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT_URL=http://minio:9000
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 2G
-
-  cvat-ui:
-    image: cvat/ui:v2.9.1
-    container_name: mlops-cvat-ui
-    restart: unless-stopped
-    depends_on:
-      - cvat-server
-    ports:
-      - "8082:80"
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-
-  # ===========================================================================
-  # DATA EXPLORATION - Renumics Spotlight
-  # ===========================================================================
-
-  spotlight:
-    build:
-      context: .
-      dockerfile: services/spotlight/Dockerfile
-    image: mlops-spotlight:latest
-    container_name: mlops-spotlight
-    restart: unless-stopped
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    ports:
-      - "8083:8000"
-    volumes:
-      - ./data:/workspace/data:ro
-      - ./outputs:/workspace/outputs:ro
-      - juicefs-mount:/workspace/jfs:ro
-    environment:
-      - SPOTLIGHT_HOST=0.0.0.0
-      - SPOTLIGHT_PORT=8000
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
 
   # ===========================================================================
   # SECRETS MANAGEMENT - HashiCorp Vault
@@ -703,7 +489,6 @@ services:
     volumes:
       - fiftyone-data:/workspace/fiftyone/datasets
       - ./data:/workspace/data:ro
-      - juicefs-mount:/workspace/jfs:ro
     environment:
       - FIFTYONE_APP_ADDRESS=0.0.0.0
       - FIFTYONE_APP_PORT=5151
@@ -729,99 +514,6 @@ services:
           memory: 4G
 
   # ===========================================================================
-  # COMFYUI - Image Generation Workflows with MinIO S3 Backend
-  # ===========================================================================
-  # Using official ComfyUI image with S3 integration for model/output storage
-
-  comfyui:
-    build:
-      context: .
-      dockerfile: services/comfyui/Dockerfile
-    image: mlops-comfyui:latest
-    container_name: mlops-comfyui
-    restart: unless-stopped
-    depends_on:
-      minio:
-        condition: service_healthy
-    ports:
-      - "8188:8188"
-    volumes:
-      - comfyui-models:/workspace/ComfyUI/models
-      - comfyui-output:/workspace/ComfyUI/output
-      - comfyui-input:/workspace/ComfyUI/input
-      - ./models:/workspace/models:ro
-      - juicefs-mount:/workspace/jfs:ro
-    environment:
-      - COMFYUI_HOST=0.0.0.0
-      - COMFYUI_PORT=8188
-      - COMPUTE_DEVICE=cpu
-      # MinIO S3 Backend for models and outputs
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT_URL=http://minio:9000
-      - AWS_DEFAULT_REGION=us-east-1
-      - S3_MODELS_BUCKET=mlops-models
-      - S3_OUTPUTS_BUCKET=mlops-outputs
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8188/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-
-  # ===========================================================================
-  # DATA QUALITY - Great Expectations
-  # ===========================================================================
-  # Self-hosted data validation and quality checks
-
-  great-expectations:
-    build:
-      context: .
-      dockerfile: services/great_expectations/Dockerfile
-    image: mlops-great-expectations:latest
-    container_name: mlops-great-expectations
-    restart: unless-stopped
-    depends_on:
-      minio:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8084:8084"
-    volumes:
-      - great-expectations-data:/workspace/great_expectations
-      - ./data:/workspace/data:ro
-      - juicefs-mount:/workspace/jfs:ro
-    environment:
-      # MinIO S3 Backend for expectations and validation results
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT_URL=http://minio:9000
-      - AWS_DEFAULT_REGION=us-east-1
-      - GE_USAGE_STATISTICS_ENABLED=false
-      - GE_DATASOURCE_DEFAULT_BUCKET=mlops-data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8084/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-
-  # ===========================================================================
   # PIPELINE STAGES (run with: docker-compose run --rm <stage> <command>)
   # ===========================================================================
 
@@ -832,15 +524,12 @@ services:
       dockerfile: pipelines/collect/Dockerfile
     image: mlops-collect:latest
     depends_on:
-      juicefs-mount:
-        condition: service_healthy
       minio:
         condition: service_healthy
     volumes:
       - .:/workspace:cached
       - ./data/raw:/workspace/data/raw
       - ./data/collected:/workspace/data/collected
-      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
       - VAULT_ADDR=http://vault:8200
@@ -877,7 +566,6 @@ services:
       - ./models:/workspace/models
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
-      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
       - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
@@ -915,7 +603,6 @@ services:
       - ./models:/workspace/models
       - ./outputs:/workspace/outputs
       - huggingface-cache:/workspace/.cache/huggingface
-      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
       - AIM_REPO=/workspace/outputs/aim
@@ -956,7 +643,6 @@ services:
       - ./outputs:/workspace/outputs
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
-      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
       - AIM_REPO=/workspace/outputs/aim
@@ -997,7 +683,6 @@ services:
       - ./outputs:/workspace/outputs
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
-      - juicefs-mount:/workspace/jfs
     environment:
       - COMPUTE_DEVICE=cpu
       - AIM_REPO=/workspace/outputs/aim
@@ -1041,7 +726,6 @@ services:
       - ./models:/workspace/models
       - fiftyone-data:/workspace/fiftyone
       - huggingface-cache:/workspace/.cache/huggingface
-      - juicefs-mount:/workspace/jfs
     environment:
       - MLOPS_ENV=development
       - DEBUG=true
@@ -1114,12 +798,8 @@ services:
       - KHOJ_HOST=khoj
       - COUCHDB_HOST=obsidian-couchdb
       - ZOTERO_HOST=zotero
-      - GE_HOST=great-expectations
       - LABEL_STUDIO_HOST=label-studio
-      - CVAT_HOST=cvat-server
       - FIFTYONE_HOST=fiftyone
-      - SPOTLIGHT_HOST=spotlight
-      - COMFYUI_HOST=comfyui
       - TEST_MODE=${TEST_MODE:-full}
       - MAX_WAIT=300
       - WAIT_INTERVAL=5
@@ -1177,24 +857,16 @@ volumes:
   redis-data:
   postgres-data:
   aim-data:
-  juicefs-data:
-  juicefs-mount:
   label-studio-data:
-  cvat-data:
-  cvat-share:
   vault-data:
   prefect-data:
   fiftyone-data:
-  comfyui-models:
-  comfyui-output:
-  comfyui-input:
   huggingface-cache:
   khoj-data:
   obsidian-vault:
   couchdb-data:
   zotero-data:
   zotero-storage:
-  great-expectations-data:
 
 # =============================================================================
 # NETWORKS
