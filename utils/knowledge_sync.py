@@ -18,6 +18,7 @@ Usage:
 import os
 import json
 import argparse
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -30,11 +31,96 @@ AIM_REPO = os.environ.get("AIM_REPO", "./outputs/aim")
 ZOTERO_URL = os.environ.get("ZOTERO_URL", "http://localhost:8085")
 FIFTYONE_URL = os.environ.get("FIFTYONE_URL", "http://localhost:5151")
 
+# Git repository URL (for commit links)
+REPO_URL = os.environ.get("REPO_URL", "https://github.com/your-org/ml_workbench")
+
 
 def ensure_dirs():
     """Ensure knowledge directories exist."""
     for subdir in ["papers", "experiments", "datasets", "models", "results"]:
         (KNOWLEDGE_DIR / subdir).mkdir(parents=True, exist_ok=True)
+
+
+# =============================================================================
+# Git Utilities
+# =============================================================================
+
+def get_git_info() -> Dict[str, Any]:
+    """Get current git state for traceability."""
+    def run_git(args: List[str]) -> str:
+        try:
+            result = subprocess.run(
+                ["git"] + args,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    commit = run_git(["rev-parse", "HEAD"])
+    commit_short = run_git(["rev-parse", "--short", "HEAD"])
+    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
+    commit_message = run_git(["log", "-1", "--format=%s"])
+    commit_author = run_git(["log", "-1", "--format=%an <%ae>"])
+
+    # Check if working directory is dirty
+    dirty = bool(run_git(["status", "--porcelain"]))
+
+    # Get list of files changed in last commit
+    modified_files = run_git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+    modified_list = modified_files.split("\n") if modified_files else []
+
+    return {
+        "commit": commit,
+        "commit_short": commit_short,
+        "branch": branch,
+        "commit_message": commit_message,
+        "commit_author": commit_author,
+        "dirty": dirty,
+        "modified_files": modified_list,
+        "repo_url": REPO_URL,
+        "commit_url": f"{REPO_URL}/commit/{commit}" if commit else "",
+        "diff_from_main": f"{REPO_URL}/compare/main...{commit}" if commit else "",
+    }
+
+
+def get_git_info_for_commit(commit_hash: str) -> Dict[str, Any]:
+    """Get git info for a specific commit."""
+    def run_git(args: List[str]) -> str:
+        try:
+            result = subprocess.run(
+                ["git"] + args,
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    commit_short = commit_hash[:8] if len(commit_hash) >= 8 else commit_hash
+    commit_message = run_git(["log", "-1", "--format=%s", commit_hash])
+    commit_author = run_git(["log", "-1", "--format=%an <%ae>", commit_hash])
+    modified_files = run_git(["diff-tree", "--no-commit-id", "--name-only", "-r", commit_hash])
+    modified_list = modified_files.split("\n") if modified_files else []
+
+    # Try to find which branch this commit is on
+    branch = run_git(["branch", "--contains", commit_hash, "--format=%(refname:short)"])
+    branch = branch.split("\n")[0] if branch else "unknown"
+
+    return {
+        "commit": commit_hash,
+        "commit_short": commit_short,
+        "branch": branch,
+        "commit_message": commit_message,
+        "commit_author": commit_author,
+        "modified_files": modified_list,
+        "repo_url": REPO_URL,
+        "commit_url": f"{REPO_URL}/commit/{commit_hash}",
+        "diff_from_main": f"{REPO_URL}/compare/main...{commit_hash}",
+    }
 
 
 def slugify(text: str) -> str:
@@ -97,8 +183,33 @@ def create_experiment_from_aim(run) -> Path:
     except:
         pass
 
+    # Get git info - try from run metadata first, then fall back to current
+    git_info = {}
+    try:
+        # AIM stores git info if available
+        git_info = dict(run.get("git", {}))
+    except:
+        pass
+
+    if not git_info.get("commit"):
+        # Try to get from run's stored git hash
+        try:
+            git_hash = run.get("git_hash", "")
+            if git_hash:
+                git_info = get_git_info_for_commit(git_hash)
+        except:
+            pass
+
+    # Fall back to current git state if nothing found
+    if not git_info.get("commit"):
+        git_info = get_git_info()
+        git_info["note"] = "Using current git state - commit at run time not recorded"
+
     filename = f"{created.strftime('%Y%m%d')}-{slugify(experiment_name)}-{run_hash}.md"
     filepath = KNOWLEDGE_DIR / "experiments" / filename
+
+    # Format modified files for display
+    modified_files_str = "\n".join(git_info.get("modified_files", []))
 
     content = f"""---
 type: experiment
@@ -109,6 +220,18 @@ date: {created.strftime('%Y-%m-%d')}
 status: completed
 hyperparameters: {json.dumps(params)}
 final_metrics: {json.dumps(metrics)}
+
+# Code Traceability
+git:
+  commit: "{git_info.get('commit', '')}"
+  commit_short: "{git_info.get('commit_short', '')}"
+  branch: "{git_info.get('branch', '')}"
+  commit_url: "{git_info.get('commit_url', '')}"
+  commit_message: "{git_info.get('commit_message', '')}"
+  author: "{git_info.get('commit_author', '')}"
+  dirty: {str(git_info.get('dirty', False)).lower()}
+  diff_from_main: "{git_info.get('diff_from_main', '')}"
+
 tags:
   - experiment
   - auto-generated
@@ -138,6 +261,26 @@ tags:
         content += f"| {k} | `{v}` |\n"
 
     content += f"""
+## Code Changes
+
+**Commit:** [`{git_info.get('commit_short', 'unknown')}`]({git_info.get('commit_url', '')}) on branch `{git_info.get('branch', 'unknown')}`
+**Message:** {git_info.get('commit_message', 'N/A')}
+**Author:** {git_info.get('commit_author', 'N/A')}
+
+### Modified Files
+```
+{modified_files_str or 'No file changes recorded'}
+```
+
+### Reproduce
+```bash
+# Checkout exact code state
+git checkout {git_info.get('commit', 'HEAD')}
+
+# Run experiment
+python -m pipelines.train.train_lora experiment={experiment_name}
+```
+
 ## Notes
 
 *Auto-synced from AIM on {datetime.now().strftime('%Y-%m-%d %H:%M')}*

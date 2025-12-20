@@ -9,6 +9,23 @@ date: {{date}}
 status: running  # planned, running, completed, failed, cancelled
 hypothesis: "{{hypothesis}}"
 
+# Code Traceability
+git:
+  commit: "{{commit_hash}}"
+  commit_short: "{{commit_short}}"
+  branch: "{{branch}}"
+  commit_url: "{{repo_url}}/commit/{{commit_hash}}"
+  commit_message: "{{commit_message}}"
+  author: "{{commit_author}}"
+  dirty: false  # true if uncommitted changes
+  diff_from_main: "{{repo_url}}/compare/main...{{commit_hash}}"
+  pr_number: null
+  pr_url: ""
+code_files:
+  training_script: "{{script_path}}"
+  config_file: "{{config_path}}"
+  modified_files: []  # Files changed in this commit
+
 # Configuration
 model:
   name: "{{model_name}}"
@@ -118,6 +135,34 @@ python -m pipelines.train.train_lora \
 - Model checkpoint: `{{checkpoint_path}}`
 - Logs: `{{log_path}}`
 - Config: `{{config_path}}`
+
+## Code Changes
+<!-- Git commit and code state when experiment was run -->
+
+**Commit:** [`{{commit_short}}`]({{repo_url}}/commit/{{commit_hash}}) on branch `{{branch}}`
+**Message:** {{commit_message}}
+**Author:** {{commit_author}}
+
+### Modified Files
+<!-- Files changed in the commit that ran this experiment -->
+```
+{{modified_files}}
+```
+
+### Key Code Snippets
+<!-- Important code that produced these results -->
+```python
+# Paste relevant training code here
+```
+
+### Reproducibility
+```bash
+# Checkout exact code state
+git checkout {{commit_hash}}
+
+# Or view diff from main
+git diff main...{{commit_hash}}
+```
 
 ## Related
 - [[]]

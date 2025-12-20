@@ -10,6 +10,26 @@ base_model: "{{base_model}}"      # Pretrained model used
 task: "{{task}}"                   # classification, generation, etc.
 framework: pytorch  # pytorch, tensorflow, jax
 
+# Code Traceability
+git:
+  # Commit that trained this model
+  training_commit: "{{training_commit}}"
+  training_commit_short: "{{training_commit_short}}"
+  training_branch: "{{training_branch}}"
+  training_commit_url: "{{repo_url}}/commit/{{training_commit}}"
+  training_commit_message: "{{training_commit_message}}"
+  # Training script and config
+  training_script: "{{training_script_path}}"
+  training_config: "{{training_config_path}}"
+  # Model definition code
+  model_definition_file: "{{model_def_path}}"
+  model_definition_line: null
+  # PR that introduced this model
+  pr_number: null
+  pr_url: ""
+  # Diff showing all changes for this model version
+  changes_url: "{{repo_url}}/compare/{{prev_version_commit}}...{{training_commit}}"
+
 # Size & Performance
 parameters_millions:
 size_mb:
@@ -132,6 +152,33 @@ model = torch.load(model_path)
 ## Changelog
 ### v{{version}}
 -
+
+## Code Traceability
+
+### Training Code
+**Commit:** [`{{training_commit_short}}`]({{repo_url}}/commit/{{training_commit}}) on `{{training_branch}}`
+**Message:** {{training_commit_message}}
+
+### Key Files
+| File | Purpose |
+|------|---------|
+| [`{{training_script_path}}`]({{repo_url}}/blob/{{training_commit}}/{{training_script_path}}) | Training script |
+| [`{{training_config_path}}`]({{repo_url}}/blob/{{training_commit}}/{{training_config_path}}) | Hydra config |
+| [`{{model_def_path}}`]({{repo_url}}/blob/{{training_commit}}/{{model_def_path}}) | Model definition |
+
+### Reproduce Training
+```bash
+# Checkout exact code state
+git checkout {{training_commit}}
+
+# Run training
+python -m pipelines.train.train_lora \
+  model={{model_name}} \
+  +experiment={{experiment_preset}}
+```
+
+### Version Diff
+[View changes from previous version]({{repo_url}}/compare/{{prev_version_commit}}...{{training_commit}})
 
 ## Related
 - Paper: [[]]

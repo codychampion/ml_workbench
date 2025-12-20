@@ -10,6 +10,18 @@ model_version: "{{version}}"
 dataset: "[[{{dataset}}]]"
 split: test  # train, val, test
 
+# Code Traceability
+git:
+  commit: "{{commit_hash}}"
+  commit_short: "{{commit_short}}"
+  branch: "{{branch}}"
+  commit_url: "{{repo_url}}/commit/{{commit_hash}}"
+  commit_message: "{{commit_message}}"
+  evaluation_script: "{{eval_script_path}}"
+  # Trace back to training code
+  training_commit: "{{training_commit}}"
+  training_commit_url: "{{repo_url}}/commit/{{training_commit}}"
+
 # Metrics
 metrics:
   accuracy:
@@ -142,6 +154,22 @@ tags:
 ## Great Expectations Validation
 <!-- Data quality validation results -->
 
+
+## Code Traceability
+
+**Evaluation Code:** [`{{commit_short}}`]({{repo_url}}/commit/{{commit_hash}})
+**Training Code:** [`{{training_commit_short}}`]({{repo_url}}/commit/{{training_commit}})
+
+### Reproduce Evaluation
+```bash
+# Checkout evaluation code
+git checkout {{commit_hash}}
+
+# Run evaluation
+python -m pipelines.evaluate.evaluate \
+  model={{model}} \
+  dataset={{dataset}}
+```
 
 ## Related
 - Experiment: [[{{experiment}}]]

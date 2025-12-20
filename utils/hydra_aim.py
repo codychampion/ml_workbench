@@ -16,9 +16,10 @@ Usage:
 
 import os
 import sys
+import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 
 from omegaconf import DictConfig, OmegaConf
 
@@ -42,6 +43,72 @@ def flatten_dict(d: Dict, parent_key: str = '', sep: str = '.') -> Dict[str, Any
         else:
             items.append((new_key, v))
     return dict(items)
+
+
+def get_git_info() -> Dict[str, Any]:
+    """
+    Get current git state for experiment traceability.
+
+    Returns dict with commit hash, branch, message, author, and modified files.
+    This is recorded at experiment start time to ensure reproducibility.
+    """
+    def run_git(args: List[str]) -> str:
+        try:
+            result = subprocess.run(
+                ["git"] + args,
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=os.getcwd()
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except Exception:
+            return ""
+
+    commit = run_git(["rev-parse", "HEAD"])
+    commit_short = run_git(["rev-parse", "--short", "HEAD"])
+    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
+    commit_message = run_git(["log", "-1", "--format=%s"])
+    commit_author = run_git(["log", "-1", "--format=%an <%ae>"])
+    commit_date = run_git(["log", "-1", "--format=%ci"])
+
+    # Check if working directory has uncommitted changes
+    dirty = bool(run_git(["status", "--porcelain"]))
+
+    # Get list of files changed in the current commit
+    modified_files = run_git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+    modified_list = modified_files.split("\n") if modified_files else []
+
+    # Get uncommitted changes if dirty
+    uncommitted = []
+    if dirty:
+        uncommitted_output = run_git(["status", "--porcelain"])
+        uncommitted = [line[3:] for line in uncommitted_output.split("\n") if line]
+
+    # Try to get remote URL for building commit links
+    remote_url = run_git(["remote", "get-url", "origin"])
+    repo_url = ""
+    if remote_url:
+        # Convert git@github.com:user/repo.git to https://github.com/user/repo
+        if remote_url.startswith("git@"):
+            repo_url = remote_url.replace("git@", "https://").replace(":", "/").rstrip(".git")
+        elif remote_url.startswith("https://"):
+            repo_url = remote_url.rstrip(".git")
+
+    return {
+        "commit": commit,
+        "commit_short": commit_short,
+        "branch": branch,
+        "commit_message": commit_message,
+        "commit_author": commit_author,
+        "commit_date": commit_date,
+        "dirty": dirty,
+        "uncommitted_files": uncommitted,
+        "modified_files": modified_list,
+        "repo_url": repo_url,
+        "commit_url": f"{repo_url}/commit/{commit}" if repo_url and commit else "",
+        "diff_from_main": f"{repo_url}/compare/main...{commit}" if repo_url and commit else "",
+    }
 
 
 def init_aim_from_hydra(
@@ -116,9 +183,20 @@ def init_aim_from_hydra(
             "device": cfg.get("compute", {}).get("device", "cpu"),
         }
 
+    # Log git info for code traceability
+    git_info = get_git_info()
+    run["git"] = git_info
+    run["git_hash"] = git_info.get("commit", "")
+
+    # Warn if working directory is dirty
+    if git_info.get("dirty"):
+        print(f"[AIM] WARNING: Uncommitted changes detected! Results may not be reproducible.")
+        print(f"[AIM] Uncommitted files: {git_info.get('uncommitted_files', [])}")
+
     print(f"[AIM] Initialized run: {run.name}")
     print(f"[AIM] Experiment: {exp_name}")
     print(f"[AIM] Repo: {repo}")
+    print(f"[AIM] Git commit: {git_info.get('commit_short', 'unknown')} ({git_info.get('branch', 'unknown')})")
 
     return run
 
