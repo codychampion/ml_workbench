@@ -7,7 +7,7 @@
 #   docker-compose run --rm train python -m pipelines.train.finetune --help
 #   docker-compose run --rm train python -m pipelines.train.train_lora --help
 # =============================================================================
-FROM python:3.13-slim
+FROM python:3.11-slim
 
 LABEL maintainer="MLOps Team"
 LABEL pipeline.stage="3-train"
@@ -21,11 +21,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
     && mkdir -p /workspace && chown -R mlops:mlops /workspace
 
 # Full ML stack for training
-RUN pip install --no-cache-dir \
+RUN uv pip install --system --no-cache \
     --extra-index-url https://download.pytorch.org/whl/cpu \
     torch torchvision \
     transformers>=4.36.0 \
@@ -38,7 +41,7 @@ RUN pip install --no-cache-dir \
     omegaconf>=2.3.0 \
     boto3 \
     hvac \
-    "dvc[all]>=3.0.0" \
+    "dvc[s3]>=3.0.0" \
     Pillow numpy tqdm requests \
     python-dotenv pyyaml \
     sentencepiece bitsandbytes

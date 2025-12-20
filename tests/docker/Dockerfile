@@ -15,11 +15,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 WORKDIR /workspace
 
 # Copy test requirements and install
 COPY tests/requirements.txt /workspace/tests/requirements.txt
-RUN pip install --no-cache-dir -r /workspace/tests/requirements.txt
+RUN uv pip install --system --no-cache -r /workspace/tests/requirements.txt
 
 # Copy test files
 COPY tests/ /workspace/tests/

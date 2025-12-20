@@ -10,9 +10,12 @@ LABEL description="Zotero-style REST API for paper management"
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install Python dependencies with uv
 COPY services/zotero/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+RUN uv pip install --system --no-cache -r /app/requirements.txt
 
 # Copy REST API server
 COPY services/zotero/server.py /app/server.py
@@ -22,5 +25,5 @@ RUN mkdir -p /data/zotero /data/storage
 
 EXPOSE 8085
 
-# Run the REST API server directly (skip translation-server for now)
+# Run the REST API server directly
 CMD ["python", "/app/server.py"]

@@ -1,7 +1,7 @@
 # =============================================================================
 # FiftyOne Service Container
 # =============================================================================
-FROM python:3.13-slim
+FROM python:3.11-slim
 
 LABEL maintainer="MLOps Team"
 LABEL service="fiftyone"
@@ -16,12 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev tini \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv for fast package management
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
 # Create user
 RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
     && mkdir -p /workspace && chown -R mlops:mlops /workspace
 
-# Python dependencies
-RUN pip install --no-cache-dir fiftyone pymongo
+# Python dependencies with uv
+RUN uv pip install --system --no-cache fiftyone pymongo boto3
 
 # Create directories
 RUN mkdir -p /workspace/fiftyone/{datasets,cache,database} \
