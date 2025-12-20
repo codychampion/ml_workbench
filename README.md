@@ -45,32 +45,26 @@ A comprehensive, self-hosted ML/AI pipeline workbench with a **pipeline-based ar
 ## Quick Start
 
 ```bash
-# Discover helpful shortcuts
-make help
+# Build all images
+docker-compose build
 
-# Build images and start the lightweight core infrastructure profile
-make build
-make infra
+# Start infrastructure services
+docker-compose up -d
 
-# (Optional) add data tooling (FiftyOne, Label Studio, Khoj/Obsidian, Zotero)
-make tools
+# Run pipeline stages
+docker-compose run --rm collect python -m pipelines.collect.collect --subreddit earthporn
+docker-compose run --rm annotate python -m pipelines.annotate.caption --input-dir ./data/collected
+docker-compose run --rm train python -m pipelines.train.finetune --dataset ./data/collected
+docker-compose run --rm evaluate python -m pipelines.evaluate.metrics --predictions ./outputs
+docker-compose run --rm infer python -m pipelines.infer.run_generation --prompts "A sunset"
 
-# Run pipeline stages (pass extra flags via ARGS)
-make collect ARGS="--subreddit earthporn"
-make annotate ARGS="--input-dir ./data/collected"
-make train ARGS="--dataset ./data/collected"
-make evaluate ARGS="--predictions ./outputs"
-make infer ARGS="--prompts 'A sunset'"
-
-# Dev shell with the core profile (add PROFILES="core tools" for data UIs)
-make dev-shell
+# Dev shell with all tools
+docker-compose --profile dev up -d dev
+docker-compose exec dev bash
 
 # Stop everything
-make down
+docker-compose down
 ```
-
-The defaults are tuned for a single-machine prototype: only the core services start by default, and heavier data UIs (FiftyOne, Label Studio, Khoj + Obsidian + Zotero) are opt-in.
-See the [Developer Guide](./docs/DEVELOPER_GUIDE.md) for profile guidance, pipeline shortcuts, testing, and DVC usage.
 
 ---
 
