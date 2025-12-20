@@ -3,7 +3,7 @@
 # PostgreSQL Multiple Database Initialization
 # =============================================================================
 # Creates multiple databases for different services:
-#   - khoj: Khoj AI assistant
+#   - khoj: Khoj AI assistant (with pgvector)
 #   - litellm: LiteLLM API gateway
 #
 # This script is automatically run on first PostgreSQL container startup.
@@ -31,11 +31,19 @@ if [ -n "${POSTGRES_MULTIPLE_DATABASES:-}" ]; then
     echo "Multiple databases created successfully"
 fi
 
-# Create additional extensions if needed
-echo "Creating extensions..."
+# Create extensions in default database
+echo "Creating extensions in default database..."
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    CREATE EXTENSION IF NOT EXISTS "vector";
+EOSQL
+
+# Create vector extension in khoj database (required for embeddings)
+echo "Creating vector extension in khoj database..."
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "khoj" <<-EOSQL
+    CREATE EXTENSION IF NOT EXISTS "vector";
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 EOSQL
 
 echo "Database initialization complete!"

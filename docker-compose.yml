@@ -150,9 +150,9 @@ services:
           cpus: '0.5'
           memory: 512M
 
-  # PostgreSQL - Backend for Khoj and LiteLLM
+  # PostgreSQL - Backend for Khoj and LiteLLM (with pgvector for embeddings)
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: mlops-postgres
     restart: unless-stopped
     volumes:
