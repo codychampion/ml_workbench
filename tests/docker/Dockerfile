@@ -4,7 +4,7 @@
 # Runs integration tests to verify all services are working correctly.
 # This container waits for services to be healthy before running tests.
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 LABEL maintainer="MLOps Workbench"
 LABEL description="Integration test runner for MLOps services"
