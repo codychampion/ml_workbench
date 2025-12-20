@@ -6,7 +6,7 @@
 # Usage:
 #   docker-compose run --rm collect python -m pipelines.collect.collect --help
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 LABEL maintainer="MLOps Team"
 LABEL pipeline.stage="1-collect"

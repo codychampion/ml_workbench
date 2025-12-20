@@ -7,7 +7,7 @@
 #   docker-compose run --rm evaluate python -m pipelines.evaluate.benchmark --help
 #   docker-compose run --rm evaluate python -m pipelines.evaluate.metrics --help
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 LABEL maintainer="MLOps Team"
 LABEL pipeline.stage="5-evaluate"

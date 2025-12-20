@@ -3,7 +3,7 @@
 # =============================================================================
 # REST API for paper management with metadata extraction
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 LABEL maintainer="MLOps Workbench"
 LABEL description="Zotero-style REST API for paper management"

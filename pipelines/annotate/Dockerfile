@@ -7,7 +7,7 @@
 #   docker-compose run --rm annotate python -m pipelines.annotate.caption --help
 #   docker-compose run --rm annotate python -m pipelines.annotate.create_dataset --help
 # =============================================================================
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 LABEL maintainer="MLOps Team"
 LABEL pipeline.stage="2-annotate"
