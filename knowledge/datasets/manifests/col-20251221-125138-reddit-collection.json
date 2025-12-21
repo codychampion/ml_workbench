@@ -1,0 +1,114 @@
+{
+  "id": "col-20251221-125138-reddit-collection",
+  "type": "collection",
+  "name": "reddit-collection",
+  "created_at": "2025-12-21T12:51:38.925917",
+  "source": {
+    "type": "reddit",
+    "subreddit": "earthporn",
+    "url": null,
+    "limit": 100,
+    "sort": "top",
+    "time_filter": "week"
+  },
+  "output_dir": "data/collected",
+  "counts": {
+    "images": 89,
+    "videos": 0
+  },
+  "git": {
+    "commit": "",
+    "commit_short": "",
+    "branch": "",
+    "message": "",
+    "author": "",
+    "dirty": false
+  },
+  "config": {
+    "project": {
+      "name": "mlops-workbench",
+      "version": "1.0.0",
+      "environment": "development",
+      "debug": "False"
+    },
+    "paths": {
+      "root": ".",
+      "data": {
+        "raw": "./data/raw",
+        "collected": "./data/collected",
+        "processed": "./data/processed"
+      },
+      "outputs": "./outputs",
+      "models": "./models",
+      "logs": "./outputs/logs",
+      "checkpoints": "./outputs/checkpoints"
+    },
+    "compute": {
+      "device": "cpu",
+      "num_workers": "2",
+      "seed": 42
+    },
+    "infrastructure": {
+      "aim": {
+        "repo": "/workspace/outputs/aim",
+        "server": null,
+        "experiment": "default",
+        "ui_port": 43800,
+        "tracking_port": 53800,
+        "sync_hydra": true
+      },
+      "storage": {
+        "endpoint": "http://minio:9000",
+        "access_key": "mlops-admin",
+        "secret_key": "mlops-dev-password",
+        "region": "us-east-1",
+        "buckets": {
+          "data": "mlops-data",
+          "models": "mlops-models",
+          "outputs": "mlops-outputs"
+        }
+      },
+      "fiftyone": {
+        "dataset_dir": "./data/fiftyone",
+        "port": 5151,
+        "database_uri": "mongodb://mongodb:27017/fiftyone"
+      }
+    },
+    "pipeline": {
+      "collect": {
+        "source": {
+          "type": "reddit",
+          "subreddit": "earthporn",
+          "url": null,
+          "limit": 100,
+          "sort": "top",
+          "time_filter": "week"
+        },
+        "filter": {
+          "images_only": true,
+          "allowed_extensions": [
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".gif"
+          ]
+        },
+        "output": {
+          "dir": "./data/collected",
+          "save_metadata": true
+        }
+      }
+    },
+    "experiment": {
+      "experiment": {
+        "name": "default",
+        "description": "Default experiment configuration",
+        "tags": [
+          "default",
+          "development"
+        ]
+      }
+    }
+  }
+}

@@ -16,10 +16,13 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /workspace
 
-# Minimal system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Minimal system dependencies (optional)
+ARG SKIP_APT=1
+RUN if [ "$SKIP_APT" = "0" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends git curl ffmpeg && rm -rf /var/lib/apt/lists/*; \
+    else \
+      echo "Skipping apt-get install (SKIP_APT=$SKIP_APT)"; \
+    fi
 
 # Install uv for fast package management
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
@@ -33,7 +36,7 @@ RUN uv pip install --system --no-cache \
     yt-dlp \
     boto3 \
     hvac \
-    prefect>=2.14.0 \
+    # Prefect removed; keep other deps
     "dvc[s3]>=3.0.0" \
     Pillow requests tqdm \
     python-dotenv pyyaml
@@ -48,6 +51,6 @@ COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
 USER mlops
 
 ENV GALLERY_DL_CONFIG=/workspace/pipelines/collect/gallery-dl.conf
-ENV PREFECT_API_URL=http://prefect-server:4200/api
+ENV PREFECT_API_URL=
 
 CMD ["python", "-m", "pipelines.collect.collect", "--help"]

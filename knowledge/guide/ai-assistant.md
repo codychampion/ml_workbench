@@ -1,3 +1,9 @@
+---
+type: guide
+title: "MLOps Workbench - AI Assistant Context"
+tags: [guide, ai-assistant]
+---
+
 # MLOps Workbench - AI Assistant Context
 
 Self-hosted ML pipeline workbench with profile-based architecture.
@@ -6,14 +12,13 @@ Self-hosted ML pipeline workbench with profile-based architecture.
 
 ```
 ml_workbench/
-├── conf/              # Hydra config
-├── data_transfer/     # S3Client
-├── knowledge/         # Obsidian vault (open in Obsidian)
-├── pipelines/         # collect → annotate → train → evaluate → infer
-├── scripts/           # Glue scripts
-├── services/          # FiftyOne
-├── utils/             # Utilities
-└── docker-compose.yml # Profile-based services
+ƒ"oƒ"?ƒ"? conf/              # Hydra config
+ƒ"oƒ"?ƒ"? data_transfer/     # S3Client
+ƒ"oƒ"?ƒ"? knowledge/         # Obsidian vault (open in Obsidian)
+ƒ"oƒ"?ƒ"? pipelines/         # collect ƒ+' annotate ƒ+' train ƒ+' evaluate ƒ+' infer
+ƒ"oƒ"?ƒ"? scripts/           # Glue scripts
+ƒ"oƒ"?ƒ"? services/          # FiftyOne
+ƒ""ƒ"?ƒ"? docker-compose.yml # Profile-based services
 ```
 
 ## Key Technologies
@@ -26,7 +31,7 @@ ml_workbench/
 | Knowledge | Obsidian + Khoj |
 | CV UI | FiftyOne |
 | Labeling | Label Studio |
-| Models | Docker images → local registry |
+| Models | Docker images ƒ+' local registry |
 
 ## Docker Profiles
 
@@ -64,19 +69,6 @@ creds = get_s3_credentials()  # Uses S3_* env vars
 key = get_api_key("openai")   # Uses OPENAI_API_KEY env var
 ```
 
-## Environment Variables
-
-```bash
-# S3 (MinIO default)
-S3_ENDPOINT=http://minio:9000
-S3_ACCESS_KEY=mlops-admin
-S3_SECRET_KEY=mlops-dev-password
-
-# For Khoj chat
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-```
-
 ## Web UIs
 
 | Service | URL | Profile |
@@ -86,15 +78,6 @@ ANTHROPIC_API_KEY=
 | FiftyOne | http://localhost:5151 | cv_ui |
 | Label Studio | http://localhost:8081 | labeling |
 | AIM | http://localhost:43800 | tracking |
-
-## Scripts
-
-```bash
-python scripts/new_experiment.py "Title"      # Create experiment plan
-python scripts/ingest_aim_run.py              # Ingest latest AIM run
-python scripts/register_model_image.py <id>   # Register model as Docker image
-python scripts/labelstudio_sync.py export     # FiftyOne → Label Studio
-```
 
 ## Knowledge Vault
 
@@ -115,11 +98,3 @@ Structure:
 ```bash
 docker compose --profile test run --rm test
 ```
-
-## Important Notes
-
-1. Use S3Client, not B2Client (deprecated in /deprecated/)
-2. Use env vars for secrets (Vault optional via VAULT_ADDR)
-3. All models ship as Docker images to local registry
-4. Obsidian is local, not a container
-5. No Prefect server, LiteLLM, CouchDB, Zotero containers

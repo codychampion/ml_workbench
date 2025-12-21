@@ -25,6 +25,7 @@ import torch
 # Support both direct execution and module execution (-m)
 sys.path.insert(0, str(Path(__file__).parent))
 from models import get_model_config, list_models, MODELS
+from utils.manifest import record_annotation_manifest, find_parent_collection_id
 
 
 class ImageCaptioner:
@@ -274,6 +275,11 @@ def main():
         action="store_true",
         help="List available models and exit"
     )
+    parser.add_argument(
+        "--collection-id",
+        type=str,
+        help="Optional parent collection ID (falls back to collection_manifest.json in input-dir)"
+    )
 
     args = parser.parse_args()
 
@@ -324,6 +330,26 @@ def main():
     print(f"Processed: {len(results)} images")
     print(f"Successful: {successful}")
     print(f"Failed: {len(results) - successful}")
+
+    # Write annotation manifest
+    parent_id = args.collection_id or find_parent_collection_id(args.input_dir)
+    record_annotation_manifest(
+        name=f"caption-{model_name}",
+        input_dir=args.input_dir,
+        output_dir=args.input_dir,
+        params={
+            "model": model_name,
+            "prompt": args.prompt,
+            "format": args.output_format,
+        },
+        counts={
+            "processed": len(results),
+            "successful": successful,
+            "failed": len(results) - successful,
+        },
+        parent_collection_id=parent_id,
+        cfg=None,
+    )
 
 
 if __name__ == "__main__":

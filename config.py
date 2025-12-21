@@ -131,6 +131,11 @@ class ProjectPaths:
         """Create all project directories if they don't exist."""
         for path_attr in ["data_raw", "data_collected", "data_processed", "outputs", "models", "logs"]:
             path = getattr(self, path_attr)
+            if path.exists() and not path.is_dir():
+                # Rename the conflicting file so the directory can be created
+                backup = path.with_suffix(path.suffix + ".bak")
+                print(f"[config] Warning: {path} exists as a file. Moving to {backup} and creating directory.")
+                path.rename(backup)
             path.mkdir(parents=True, exist_ok=True)
 
 

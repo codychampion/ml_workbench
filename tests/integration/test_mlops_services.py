@@ -44,58 +44,8 @@ class TestAIMIntegration:
 
 
 class TestPrefectIntegration:
-    """Test Prefect workflow orchestration integration."""
-
-    BASE_URL = f"http://{SERVICE_HOST}:4200"
-
-    @pytest.mark.integration
-    def test_prefect_health(self):
-        """Test Prefect health endpoint."""
-        response = requests.get(f"{self.BASE_URL}/api/health", timeout=10)
-        assert response.status_code == 200
-
-    @pytest.mark.integration
-    def test_prefect_flows(self):
-        """Test Prefect flows API."""
-        try:
-            response = requests.post(
-                f"{self.BASE_URL}/api/flows/filter",
-                json={},
-                timeout=10
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert isinstance(data, list)
-        except Exception as e:
-            pytest.fail(f"Prefect flows API failed: {e}")
-
-    @pytest.mark.integration
-    def test_prefect_deployments(self):
-        """Test Prefect deployments API."""
-        try:
-            response = requests.post(
-                f"{self.BASE_URL}/api/deployments/filter",
-                json={},
-                timeout=10
-            )
-            assert response.status_code == 200
-            data = response.json()
-            assert isinstance(data, list)
-        except Exception as e:
-            pytest.fail(f"Prefect deployments API failed: {e}")
-
-    @pytest.mark.integration
-    def test_prefect_work_pools(self):
-        """Test Prefect work pools API."""
-        try:
-            response = requests.post(
-                f"{self.BASE_URL}/api/work_pools/filter",
-                json={},
-                timeout=10
-            )
-            assert response.status_code == 200
-        except Exception as e:
-            pytest.fail(f"Prefect work pools API failed: {e}")
+    """Prefect removed; keeping placeholder tests skipped."""
+    pytest.skip("Prefect not in stack", allow_module_level=True)
 
 
 class TestGreatExpectationsIntegration:

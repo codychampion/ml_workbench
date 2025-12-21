@@ -1,0 +1,10 @@
+# =============================================================================
+# Pipeline Configuration - Hugging Face Dataset Collection
+# =============================================================================
+collect_hf:
+  dataset: null           # e.g., laion/laion400m
+  split: train
+  limit: 100
+  image_column: image
+  id_column: null
+  output_dir: ${paths.data.collected}

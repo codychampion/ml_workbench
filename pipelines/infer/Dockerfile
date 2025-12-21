@@ -36,7 +36,7 @@ RUN uv pip install --system --no-cache \
     peft>=0.7.0 \
     fiftyone \
     aim \
-    prefect>=2.14.0 \
+    # Prefect removed from pipelines; keep others
     hydra-core>=1.3.0 \
     omegaconf>=2.3.0 \
     boto3 \
@@ -59,6 +59,6 @@ USER mlops
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV AIM_REPO=/workspace/outputs/aim
 ENV COMPUTE_DEVICE=cpu
-ENV PREFECT_API_URL=http://prefect-server:4200/api
+ENV PREFECT_API_URL=
 
 CMD ["python", "-m", "pipelines.infer.run_generation", "--help"]
