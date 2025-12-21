@@ -23,7 +23,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-# Configuration
+# Try to use Hydra config if available
+try:
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
+
+# Default configuration (fallback when Hydra not available)
 KNOWLEDGE_DIR = Path(os.environ.get("KNOWLEDGE_DIR", "./knowledge"))
 AIM_REPO = os.environ.get("AIM_REPO", "./outputs/aim")
 DATA_DIR = Path(os.environ.get("DATA_DIR", "./data"))
@@ -34,6 +41,38 @@ FIFTYONE_URL = os.environ.get("FIFTYONE_URL", "http://localhost:5151")
 
 # Git repository URL (for commit links)
 REPO_URL = os.environ.get("REPO_URL", "https://github.com/your-org/ml_workbench")
+
+
+def get_knowledge_config(cfg: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    Get knowledge base configuration from Hydra config or environment variables.
+
+    Args:
+        cfg: Optional Hydra config (DictConfig). If None, uses env vars.
+
+    Returns:
+        Dict with knowledge base configuration
+    """
+    if cfg and HYDRA_AVAILABLE and hasattr(cfg, 'infrastructure'):
+        knowledge_cfg = cfg.infrastructure.knowledge
+        return {
+            'vault_dir': Path(knowledge_cfg.get('vault_dir', './knowledge')),
+            'zotero_url': knowledge_cfg.zotero.get('url', ZOTERO_URL),
+            'fiftyone_url': os.getenv('FIFTYONE_URL', 'http://localhost:5151'),
+            'aim_repo': cfg.infrastructure.aim.get('repo', AIM_REPO),
+            'data_dir': Path(cfg.paths.get('data', {}).get('collected', './data/collected')).parent,
+            'sync_sources': knowledge_cfg.sync.get('sources', ['all']),
+        }
+    else:
+        # Fallback to environment variables
+        return {
+            'vault_dir': KNOWLEDGE_DIR,
+            'zotero_url': ZOTERO_URL,
+            'fiftyone_url': FIFTYONE_URL,
+            'aim_repo': AIM_REPO,
+            'data_dir': DATA_DIR,
+            'sync_sources': ['all'],
+        }
 
 
 def ensure_dirs():

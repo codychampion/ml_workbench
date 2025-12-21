@@ -36,10 +36,61 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import hashlib
+import os
+
+# Try to use Hydra config if available
+try:
+    from omegaconf import DictConfig, OmegaConf
+    HYDRA_AVAILABLE = True
+except ImportError:
+    HYDRA_AVAILABLE = False
 
 
-def generate_id(prefix: str = "") -> str:
-    """Generate a unique ID with optional prefix."""
+def get_manifest_config(cfg: Optional[Any] = None) -> Dict[str, Any]:
+    """
+    Get manifest configuration from Hydra config or environment variables.
+
+    Args:
+        cfg: Optional Hydra config (DictConfig). If None, uses env vars.
+
+    Returns:
+        Dict with manifest configuration
+    """
+    if cfg and HYDRA_AVAILABLE and hasattr(cfg, 'infrastructure'):
+        manifest_cfg = cfg.infrastructure.manifest
+        return {
+            'auto_create': manifest_cfg.get('auto_create', True),
+            'git_tracking': manifest_cfg.get('git_tracking', True),
+            'version': manifest_cfg.get('version', '1.0'),
+            'id_prefix': {
+                'collection': manifest_cfg.id_prefix.get('collection', 'col-'),
+                'annotation': manifest_cfg.id_prefix.get('annotation', 'ann-'),
+            }
+        }
+    else:
+        # Fallback to environment variables
+        return {
+            'auto_create': os.getenv('MANIFEST_AUTO_CREATE', 'true').lower() == 'true',
+            'git_tracking': os.getenv('MANIFEST_GIT_TRACKING', 'true').lower() == 'true',
+            'version': os.getenv('MANIFEST_VERSION', '1.0'),
+            'id_prefix': {
+                'collection': os.getenv('MANIFEST_COLLECTION_PREFIX', 'col-'),
+                'annotation': os.getenv('MANIFEST_ANNOTATION_PREFIX', 'ann-'),
+            }
+        }
+
+
+def generate_id(prefix: str = "", cfg: Optional[Any] = None) -> str:
+    """
+    Generate a unique ID with optional prefix.
+
+    Args:
+        prefix: ID prefix (e.g., 'col-', 'ann-'). If empty, uses config defaults.
+        cfg: Optional Hydra config for reading prefix from config
+
+    Returns:
+        Unique ID in format: prefix-YYYYMMDD-hash
+    """
     unique = str(uuid.uuid4())[:8]
     timestamp = datetime.now().strftime("%Y%m%d")
     return f"{prefix}{timestamp}-{unique}" if prefix else f"{timestamp}-{unique}"

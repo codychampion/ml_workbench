@@ -62,6 +62,46 @@ fiftyone:
   address: "0.0.0.0"
   database_uri: ${oc.env:FIFTYONE_DATABASE_URI,mongodb://mongodb:27017/fiftyone}
 
+# Knowledge Base - Obsidian + Khoj + Zotero
+knowledge:
+  # Obsidian vault directory
+  vault_dir: ${oc.env:KNOWLEDGE_DIR,${paths.root}/knowledge}
+  # Auto-sync settings
+  sync:
+    enabled: true
+    sources:
+      - aim
+      - zotero
+      - fiftyone
+      - collections
+      - annotations
+    interval_seconds: 300  # Sync every 5 minutes if watching
+  # Khoj - AI search
+  khoj:
+    url: ${oc.env:KHOJ_URL,http://localhost:42110}
+  # Obsidian CouchDB sync
+  couchdb:
+    url: ${oc.env:COUCHDB_URL,http://localhost:5984}
+    username: ${oc.env:COUCHDB_USER,obsidian}
+    password: ${oc.env:COUCHDB_PASSWORD,mlops-dev-password}
+    database: obsidian
+  # Zotero
+  zotero:
+    url: ${oc.env:ZOTERO_URL,http://localhost:8085}
+
+# Dataset Manifest System
+manifest:
+  # Auto-create manifests
+  auto_create: true
+  # Include git traceability
+  git_tracking: true
+  # Manifest version
+  version: "1.0"
+  # ID prefix for collections and annotations
+  id_prefix:
+    collection: "col-"
+    annotation: "ann-"
+
 # Legacy B2 Storage (deprecated - use storage.* settings above)
 b2:
   bucket_name: ${oc.env:B2_BUCKET_NAME,mlops-data-bucket}
