@@ -1,208 +1,141 @@
-# CUAD Dataset Card
+---
+type: dataset
+name: "CUAD"
+fiftyone_name: "cuad_contracts"
+fiftyone_url: "http://localhost:5151/datasets/cuad_contracts"
 
-## Dataset Information
+# Source
+source: huggingface
+source_url: "https://huggingface.co/datasets/theatticusproject/cuad"
+license: "CC-BY-4.0"
+citation: "Hendrycks et al., 2021"
 
-**Name:** Contract Understanding Atticus Dataset (CUAD)
-**Version:** v1
-**Source:** https://huggingface.co/datasets/theatticusproject/cuad
-**License:** CC-BY-4.0
-**Created by:** The Atticus Project
-**Task Type:** Legal Contract Analysis, Clause Classification, Entity Extraction
+# Storage
+s3_bucket: "mlops-data"
+s3_path: "datasets/cuad"
+local_path: "data/collected/cuad"
+size_gb: 0.005
+num_files: 84325
 
-## Dataset Description
+# Data Statistics
+total_samples: 84325
+train_samples: 84325
+val_samples: 0
+test_samples: 0
+num_classes: 41
+class_distribution: {}
 
-CUAD is a corpus of more than 13,000 labels across 510 commercial legal contracts designed to support NLP research in legal document analysis. It enables automated identification of 41 important clause categories that lawyers typically review during corporate transactions.
+# Data Type
+modality: text
+task_type: legal-contract-analysis
+format: jsonl
+resolution: "variable-length-text"
 
-### Key Statistics
+# Quality
+has_labels: true
+label_quality: high
+annotation_tool: "expert-lawyers"
+quality_checks_passed: ["expert-annotated", "peer-reviewed"]
 
-- **Total Samples:** 84,325 (train split)
-- **Number of Contracts:** 510
-- **Clause Categories:** 41
-- **Text Length Range:** 0 to 6,970 characters
-- **Format:** Parquet (5.45 MB compressed)
-- **License:** CC-BY-4.0 (allows research and commercial use)
+# Preprocessing
+preprocessing_applied: []
+augmentations: []
+normalization: null
 
-### Clause Categories
+# Versioning
+version: "1.0"
+dvc_tracked: false
+created_date: 2025-12-22
+last_modified: 2025-12-22
 
-The dataset includes 41 clause categories divided into two types:
+# Connections
+used_in_experiments: ["[[cuad_maker_plan]]"]
+derived_from: ""
+creates_dataset: []
+related_papers: ["[[maker_paper]]"]
+part_of_project: "contract-review-ai"
 
-#### Binary Categories (33)
-These require YES/NO answers about clause presence:
+tags:
+  - dataset
+  - legal
+  - contracts
+  - nlp
+  - text-classification
+  - entity-extraction
+---
+
+# Dataset: CUAD (Contract Understanding Atticus Dataset)
+
+## Overview
+
+The Contract Understanding Atticus Dataset (CUAD) v1 is a corpus of more than 13,000 labels across 510 commercial legal contracts designed to support NLP research in legal document analysis. Created by The Atticus Project, it enables automated identification of 41 important clause categories that lawyers typically review during corporate transactions.
+
+**Key Features:**
+- 84,325 training samples
+- 41 clause categories (33 binary, 8 entity extraction)
+- Expert-annotated by lawyers
+- Text length: 0-6,970 characters
+- CC-BY-4.0 license (commercial use allowed)
+
+## Sample Data
+
+The dataset contains real commercial contracts with annotations for clauses like:
 - Anti-Assignment
 - Audit Rights
 - Cap On Liability
-- Change Of Control
-- Competitive Restriction Exception
-- Covenant Not To Sue
-- Governing Law
-- Insurance
-- IP Ownership Assignment
-- Joint IP Ownership
-- License Grant
-- Liquidated Damages
-- Minimum Commitment
-- Most Favored Nation
 - Non-Compete
-- Non-Disparagement
-- Non-Solicit Of Customers
-- Non-Solicit Of Employees
-- Post-Termination Services
-- Price Restrictions
-- Renewal Term
-- Revenue/Profit Sharing
-- ROFR/ROFO/ROFN
-- Source Code Escrow
-- Termination For Convenience
-- Third Party Beneficiary
-- Uncapped Liability
-- Unlimited/All-You-Can-Eat License
-- Volume Restriction
-- Warranty Duration
+- Termination clauses
+- IP ownership and licensing
+- And 35 more categories...
 
-#### Entity Extraction Categories (8)
-These require extracting specific entities, dates, or locations:
-- Document Name
-- Effective Date
-- Expiration Date
-- Notice Period To Terminate Renewal
-- Parties (names and locations)
-- Term Duration
-- Agreement Value
+## Collection Methodology
 
-### Data Format
+- **Source:** The Atticus Project
+- **Annotation:** Expert lawyers
+- **Domain:** Commercial legal contracts
+- **Format:** SQuAD 2.0-style JSON + CSV + Excel
+- **Quality:** Peer-reviewed, expert-annotated
 
-#### Hugging Face Format
-```json
-{
-  "text": "AMENDMENT TO SERVICES AGREEMENT This Amendment to Services Agreement...",
-  "Anti-Assignment": true,
-  "Audit Rights": false,
-  ...
-}
-```
+## Label Schema
 
-#### Available Formats
-1. **Master CSV:** 83 columns x 511 rows with all annotations
-2. **SQuAD 2.0 JSON:** For question-answering tasks
-3. **Excel Files:** 28 files organized by clause category
-4. **Raw Text:** 510 PDF and TXT files of full contracts
+### Binary Classification Categories (33)
 
-## Use Cases
+| Category | Type | Description |
+|----------|------|-------------|
+| Anti-Assignment | Binary | Restrictions on contract assignment |
+| Audit Rights | Binary | Right to audit counterparty |
+| Cap On Liability | Binary | Limitation on liability damages |
+| Non-Compete | Binary | Non-competition restrictions |
+| ... | ... | (29 more binary categories) |
 
-### Primary Use Case: MAKER-Based Contract Review
+### Entity Extraction Categories (8)
 
-Apply the MAKER framework (from paper arXiv:2511.09030) to achieve high-precision contract review:
+| Category | Type | Format |
+|----------|------|--------|
+| Document Name | Entity | Text string |
+| Effective Date | Entity | mm/dd/yyyy |
+| Expiration Date | Entity | mm/dd/yyyy |
+| Notice Period | Entity | Duration |
+| ... | ... | (4 more entity categories) |
 
-1. **Decomposition:** Break each contract into 41 clause identification subtasks
-2. **Error Correction:** Use multi-agent voting (k=3-5) for each clause
-3. **Red-Flagging:** Discard uncertain or overly complex responses
+## Data Quality
 
-Expected Performance:
-- Accuracy: >95% F1 score per clause category
-- Reliability: >90% zero-error contract reviews
-- Cost: <$5 per contract with GPT-4.1-mini
+### Quality Checks
+- [x] No corrupted files
+- [x] Labels verified by legal experts
+- [x] Class balance documented
+- [x] No duplicates
+- [ ] Train/val/test split (single train split provided)
 
-### Additional Use Cases
-
-1. **Legal Document Understanding:** Train models to understand contract structure
-2. **Clause Extraction:** Extract specific clauses for downstream analysis
-3. **Risk Assessment:** Identify high-risk clauses automatically
-4. **Contract Comparison:** Compare clauses across multiple contracts
-5. **Benchmarking:** Evaluate LLM performance on legal reasoning
-
-## Dataset Structure
-
-### Splits
-- **train:** 84,325 samples (primary split)
-- No explicit test/validation splits provided in standard distribution
-
-### Features
-- **text** (string): Contract clause text
-- **[41 clause fields]** (various types): Annotations for each clause category
-
-### Related Categories
-Certain clause categories are grouped together for overlapping contexts:
-- Non-compete related: Non-Compete, Non-Solicit Of Customers, Non-Solicit Of Employees
-- IP related: IP Ownership Assignment, Joint IP Ownership, License Grant
-- Termination related: Termination For Convenience, Notice Period, Post-Termination Services
-
-## Citation
-
-If you use this dataset, please cite:
-
-```bibtex
-@article{hendrycks2021cuad,
-  title={CUAD: An Expert-Annotated NLP Dataset for Legal Contract Review},
-  author={Hendrycks, Dan and Burns, Collin and Chen, Anya and Ball, Spencer},
-  journal={arXiv preprint arXiv:2103.06268},
-  year={2021}
-}
-```
-
-## Dataset Quality
-
-### Strengths
-- Expert-annotated by lawyers
-- Covers real commercial contracts
-- Comprehensive clause coverage (41 categories)
-- Standardized annotation format
-- Large enough for training and evaluation
-
-### Limitations
-- Single domain (commercial contracts)
+### Known Issues
+- Imbalanced class distribution (some clauses are rare)
+- Single domain (commercial contracts only)
 - English language only
-- May not cover all possible clause types
-- Potential label noise (even with expert annotation)
-- Imbalanced class distribution (some clauses rare)
+- US-centric legal terminology
 
-## Ethical Considerations
+## Usage
 
-### Privacy
-- Contracts are from public sources or anonymized
-- No personally identifiable information (PII) should be present
-- Review for sensitive information before use in production
-
-### Bias
-- Dataset may reflect biases in commercial contracting practices
-- Primarily US-based contracts
-- May not generalize to other legal systems or contract types
-
-### Intended Use
-- Research and development of legal AI systems
-- Training and benchmarking NLP models
-- Educational purposes
-- Commercial use allowed under CC-BY-4.0
-
-### Out-of-Scope Use
-- Should not replace human legal review for critical decisions
-- Not suitable for automated contract generation without oversight
-- Requires domain expertise for proper interpretation
-
-## Related Resources
-
-### Papers
-- MAKER Framework: "Solving a Million-Step LLM Task with Zero Errors" (arXiv:2511.09030)
-- Original CUAD Paper: Hendrycks et al., "CUAD: An Expert-Annotated NLP Dataset for Legal Contract Review"
-
-### Code
-- HuggingFace Datasets: `load_dataset("theatticusproject/cuad")`
-- This repo: `python -m pipelines.collect.collect_cuad`
-
-### Related Datasets
-- ContractNLI: Natural language inference for contracts
-- LEDGAR: Legal provision classification
-- MultiLegalPile: Large-scale legal text corpus
-
-## Maintenance
-
-**Last Updated:** 2025-12-22
-**Status:** Active
-**Contact:** The Atticus Project (via HuggingFace)
-**Issues:** Report at HuggingFace dataset page
-
-## Download Instructions
-
-### Using HuggingFace Datasets
+### Loading with HuggingFace
 ```python
 from datasets import load_dataset
 
@@ -211,12 +144,9 @@ dataset = load_dataset("theatticusproject/cuad")
 
 # Load specific split
 train_data = load_dataset("theatticusproject/cuad", split="train")
-
-# Load with streaming (for large datasets)
-dataset = load_dataset("theatticusproject/cuad", streaming=True)
 ```
 
-### Using This Repository
+### Loading with This Repo
 ```bash
 # Download 1000 samples for testing
 python -m pipelines.collect.collect_cuad --split train --limit 1000
@@ -228,14 +158,80 @@ python -m pipelines.collect.collect_cuad --split train --limit -1
 python -m pipelines.collect.collect_cuad --prepare-maker
 ```
 
-### Direct Download
-Visit https://huggingface.co/datasets/theatticusproject/cuad for additional download options.
+### Loading with Hydra
+```yaml
+pipeline: collect_cuad
+collect_cuad:
+  source:
+    dataset: "theatticusproject/cuad"
+    split: train
+    limit: 1000
+```
 
-## Version History
+## Preprocessing Pipeline
 
-- **v1.0 (2021):** Initial release with 510 contracts and 41 clause categories
-- No subsequent versions as of 2025-12-22
+No preprocessing applied by default. The text is stored as-is from the original contracts.
 
----
+For MAKER experiments, the dataset is decomposed into individual clause identification tasks:
+```python
+# Each contract → 41 clause identification subtasks
+# Each subtask = (contract_text, clause_category, label)
+```
 
-**Note:** This dataset card follows the template from [HuggingFace Dataset Cards](https://huggingface.co/docs/hub/datasets-cards).
+## Augmentations Used
+
+None. Legal text should not be augmented as it may change legal meaning.
+
+## Related Datasets
+- [[ContractNLI]] - Natural language inference for contracts
+- [[LEDGAR]] - Legal provision classification
+- [[MultiLegalPile]] - Large-scale legal text corpus
+
+## Experiments Using This Dataset
+- [[cuad_maker_plan]] - MAKER-based contract review with zero errors
+
+## Related Papers
+- [[maker_paper]] - "Solving a Million-Step LLM Task with Zero Errors"
+- Original CUAD Paper: Hendrycks et al., "CUAD: An Expert-Annotated NLP Dataset for Legal Contract Review"
+
+## Notes
+
+### Strengths
+- Expert-annotated by lawyers (high quality)
+- Covers 41 important clause categories
+- Real commercial contracts
+- Suitable for both binary classification and entity extraction
+- Permissive license (CC-BY-4.0)
+
+### Limitations
+- Single domain (commercial contracts)
+- No train/val/test splits provided
+- Class imbalance (some clauses are rare)
+- English only
+- May not generalize to other legal systems
+
+### Ideal Use Cases
+- Training contract analysis models
+- Benchmarking legal NLP systems
+- Testing multi-step reasoning systems ([[maker_paper]])
+- Clause extraction and classification research
+
+## Citation
+
+```bibtex
+@article{hendrycks2021cuad,
+  title={CUAD: An Expert-Annotated NLP Dataset for Legal Contract Review},
+  author={Hendrycks, Dan and Burns, Collin and Chen, Anya and Ball, Spencer},
+  journal={arXiv preprint arXiv:2103.06268},
+  year={2021}
+}
+```
+
+## Download Instructions
+
+See [[cuad_maker_plan#Setup]] for complete setup instructions.
+
+**Quick Start:**
+```bash
+python -m pipelines.collect.collect_cuad --limit 100
+```

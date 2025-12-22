@@ -1,12 +1,36 @@
+---
+type: experiment-plan
+exp_id: "cuad-maker-001"
+created: "2025-12-22"
+status: planned
+domain: legal-ai
+task: contract-review
+method: MAKER
+
+# Connections
+dataset: "[[cuad_dataset_card]]"
+paper: "[[maker_paper]]"
+related_experiments: []
+
+tags:
+  - maker
+  - multi-agent
+  - legal
+  - contracts
+  - zero-errors
+  - decomposition
+  - voting
+---
+
 # MAKER-Based Contract Review Experiment Design
 
-**Dataset:** CUAD (Contract Understanding Atticus Dataset)
-**Paper:** "Solving a Million-Step LLM Task with Zero Errors" (arXiv:2511.09030)
+**Dataset:** [[cuad_dataset_card|CUAD]] (Contract Understanding Atticus Dataset)
+**Paper:** [[maker_paper|"Solving a Million-Step LLM Task with Zero Errors"]] (arXiv:2511.09030)
 **Date:** 2025-12-22
 
 ## Executive Summary
 
-This experiment applies the MAKER framework (Maximal Agentic decomposition, first-to-ahead-by-K Error correction, and Red-flagging) to automated contract review using the CUAD dataset. The goal is to achieve high-precision identification of 41 clause categories across commercial legal contracts by decomposing the review process into minimal subtasks and applying error correction at each step.
+This experiment applies the **MAKER framework** (Maximal Agentic decomposition, first-to-ahead-by-K Error correction, and Red-flagging) from [[maker_paper]] to automated contract review using the [[cuad_dataset_card|CUAD dataset]]. The goal is to achieve high-precision identification of 41 clause categories across commercial legal contracts by decomposing the review process into minimal subtasks and applying error correction at each step.
 
 ## Background
 
