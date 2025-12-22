@@ -35,27 +35,22 @@ import torch.nn as nn
 import fiftyone as fo
 import fiftyone.zoo as foz
 
-# Prefect for workflow orchestration
-try:
-    from prefect import flow, task
-    PREFECT_AVAILABLE = True
-except ImportError:
-    PREFECT_AVAILABLE = False
-    # Provide no-op decorators when Prefect is not available
-    def flow(*args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator if not args or callable(args[0]) else decorator
-    def task(*args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator if not args or callable(args[0]) else decorator
+# No-op decorators (Prefect removed)
+def flow(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    return decorator if not args or callable(args[0]) else decorator
+
+def task(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    return decorator if not args or callable(args[0]) else decorator
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config import get_config
-from data_transfer import B2Client
+from utils.storage import get_s3_client
 
 # AIM for experiment tracking
 try:
@@ -295,8 +290,8 @@ def run_adversarial_pipeline(
     # Step 3: Initialize patch generator
     generator = SymbolicPatchGenerator(device=config.compute.device)
 
-    # Step 4: Initialize B2 client for data I/O (mocked)
-    b2_client = B2Client()
+    # Step 4: Initialize S3 client for data I/O (mocked)
+    s3_client = get_s3_client(bucket="mlops-data")
 
     # Step 5: Create visualization dataset
     viz_dataset_name = f"adversarial_patches_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -364,11 +359,10 @@ def run_adversarial_pipeline(
                 aim_patched = AimImage(Image.fromarray(patched_image), caption=f"{pattern_type} patch")
                 run.track(aim_patched, name="patched_images", step=sample_idx, context={"pattern": pattern_type})
 
-            # Upload to B2 (mocked)
-            b2_client.upload_file(
-                source=patched_path,
-                destination_name=f"outputs/adversarial/{patched_path.name}"
-            )
+            # Upload to storage if configured
+            if s3_client:
+                dest_key = f"outputs/adversarial/{patched_path.name}"
+                s3_client.upload_file(patched_path, dest_key)
 
             sample_idx += 1
 

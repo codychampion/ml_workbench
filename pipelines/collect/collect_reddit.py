@@ -18,33 +18,38 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
-# Prefect for workflow orchestration
-try:
-    from prefect import flow, task
-    PREFECT_AVAILABLE = True
-except ImportError:
-    PREFECT_AVAILABLE = False
-    # Provide no-op decorators when Prefect is not available
-    def flow(*args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator if not args or callable(args[0]) else decorator
-    def task(*args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator if not args or callable(args[0]) else decorator
+# No-op decorators (Prefect removed)
+def flow(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    return decorator if not args or callable(args[0]) else decorator
+
+def task(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    return decorator if not args or callable(args[0]) else decorator
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config import get_config
+from utils.hydra_aim import init_aim_from_hydra
+from utils.manifest import record_collection_manifest
+
+# Optional Hydra integration
+try:
+    import hydra
+    from omegaconf import DictConfig
+except ImportError:
+    hydra = None
+    DictConfig = Any
 
 
 @task(name="collect-subreddit", retries=2, retry_delay_seconds=30)
-def collect_subreddit_task(collector, subreddit: str, limit: int, sort: str, time_range: str, media_types: list = None):
+def collect_subreddit_task(collector, subreddit: str, limit: int, sort: str, time_range: str, media_filter: Optional[str] = None):
     """Prefect task wrapper for subreddit collection."""
-    return collector.collect_subreddit(subreddit, limit, sort, time_range, media_types)
+    return collector.collect_subreddit(subreddit, limit, sort, time_range, media_filter)
 
 
 class DataCollector:
@@ -70,7 +75,7 @@ class DataCollector:
         limit: int = 100,
         sort: str = "hot",
         time_range: str = "all",
-        media_types: list = None
+        media_filter: Optional[str] = None
     ) -> list:
         """
         Collect images from a Reddit subreddit.
@@ -112,9 +117,8 @@ class DataCollector:
             cmd.extend(["--config", str(self.config_path)])
 
         # Filter media types if specified
-        if media_types:
-            filter_expr = " or ".join([f'extension in {media_types}'])
-            cmd.extend(["--filter", filter_expr])
+        if media_filter:
+            cmd.extend(["--filter", media_filter])
 
         cmd.append(url)
 
@@ -282,6 +286,11 @@ def main():
         action="store_true",
         help="List supported sites and exit"
     )
+    parser.add_argument(
+        "--hydra",
+        action="store_true",
+        help="Use Hydra config (conf/pipeline/collect.yaml) instead of CLI flags"
+    )
 
     args = parser.parse_args()
 
@@ -291,15 +300,19 @@ def main():
         collector.list_supported_sites()
         return
 
-    if not args.subreddit and not args.url:
+    if not args.subreddit and not args.url and not args.hydra:
         parser.print_help()
         print("\nExample usage:")
         print("  python collect.py --subreddit earthporn --limit 50")
         print("  python collect.py --subreddit 'art,pics' --sort top --time week")
         print("  python collect.py --url 'https://reddit.com/r/art/top'")
+        print("  python collect.py --hydra  # uses conf/pipeline/collect.yaml")
         return
 
-    media_types = ["jpg", "jpeg", "png", "gif", "webp"] if args.images_only else None
+    media_filter = None
+    if args.images_only:
+        exts = ["jpg", "jpeg", "png", "gif", "webp"]
+        media_filter = f"extension in ({', '.join([repr(e) for e in exts])})"
 
     if args.subreddit:
         # Handle multiple subreddits
@@ -310,13 +323,30 @@ def main():
                 limit=args.limit,
                 sort=args.sort,
                 time_range=args.time,
-                media_types=media_types
+                media_filter=media_filter
             )
 
     if args.url:
         collector.collect_url(args.url)
 
     collector.save_metadata()
+    # Write collection manifest
+    total_images = sum(item.get("images", 0) for item in collector.collected_items)
+    total_videos = sum(item.get("videos", 0) for item in collector.collected_items)
+    record_collection_manifest(
+        name="reddit-collection",
+        output_dir=args.output_dir,
+        source={
+            "type": "reddit" if args.subreddit else "url",
+            "subreddit": args.subreddit,
+            "url": args.url,
+            "limit": args.limit,
+            "sort": args.sort,
+            "time_filter": args.time,
+        },
+        counts={"images": total_images, "videos": total_videos},
+        cfg=None,
+    )
 
     print("\n" + "=" * 60)
     print("Collection Complete!")
@@ -339,14 +369,16 @@ def run_collection_flow(
     """
     Prefect flow for data collection.
 
-    Run with: prefect deployment run 'data-collection-pipeline/default'
+    (Prefect removed; run directly with python -m pipelines.collect.collect_reddit)
     """
     collector = DataCollector(output_dir=output_dir)
-    media_types = ["jpg", "jpeg", "png", "gif", "webp"] if images_only else None
+    media_filter = None
+    if images_only:
+        media_filter = "extension in ('jpg','jpeg','png','gif','webp')"
 
     all_files = []
     for sub in subreddits:
-        files = collect_subreddit_task(collector, sub, limit, sort, time_range, media_types)
+        files = collect_subreddit_task(collector, sub, limit, sort, time_range, media_filter)
         all_files.extend(files)
 
     collector.save_metadata()
@@ -354,4 +386,70 @@ def run_collection_flow(
 
 
 if __name__ == "__main__":
-    main()
+    # Support Hydra-driven runs with --hydra flag
+    if hydra is not None and "--hydra" in sys.argv:
+        # Remove the flag so Hydra doesn't treat it as an unknown argument
+        sys.argv = [arg for arg in sys.argv if arg != "--hydra"]
+
+        @hydra.main(version_base="1.2", config_path="../../conf", config_name="config")
+        def hydra_main(cfg: "DictConfig"):  # type: ignore[misc]
+            collect_cfg = cfg.get("pipeline", {}).get("collect", {})
+            source = collect_cfg.get("source", {})
+            filter_cfg = collect_cfg.get("filter", {})
+            output_cfg = collect_cfg.get("output", {})
+
+            subreddit = source.get("subreddit")
+            url = source.get("url")
+            limit = source.get("limit", 100)
+            sort = source.get("sort", "hot")
+            time_filter = source.get("time_filter", "all")
+            allowed_ext = filter_cfg.get("allowed_extensions", None)
+            # gallery-dl expects a string expression; pass None to disable
+            media_filter = None
+            if allowed_ext:
+                # Convert [".jpg", ".png"] -> "extension in ['jpg','png']"
+                exts = [ext.lstrip(".") for ext in allowed_ext]
+                media_filter = f"extension in ({', '.join([repr(e) for e in exts])})"
+
+            output_dir = Path(output_cfg.get("dir", "./data/collected"))
+            collector = DataCollector(output_dir=output_dir)
+
+            if subreddit:
+                subs = [s.strip() for s in str(subreddit).split(",")]
+                for sub in subs:
+                    collect_subreddit_task(
+                        collector=collector,
+                        subreddit=sub,
+                        limit=limit,
+                        sort=sort,
+                        time_range=time_filter,
+                        media_filter=media_filter,
+                    )
+
+            if url:
+                collector.collect_url(url)
+
+            # Log config + git state into AIM
+            init_aim_from_hydra(cfg, run_name=f"collect-{subreddit or 'url'}", experiment="collect")
+            collector.save_metadata()
+
+            total_images = sum(item.get("images", 0) for item in collector.collected_items)
+            total_videos = sum(item.get("videos", 0) for item in collector.collected_items)
+            record_collection_manifest(
+                name="reddit-collection",
+                output_dir=output_dir,
+                source={
+                    "type": "reddit" if subreddit else "url",
+                    "subreddit": subreddit,
+                    "url": url,
+                    "limit": limit,
+                    "sort": sort,
+                    "time_filter": time_filter,
+                },
+                counts={"images": total_images, "videos": total_videos},
+                cfg=cfg,
+            )
+
+        hydra_main()
+    else:
+        main()

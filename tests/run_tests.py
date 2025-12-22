@@ -53,7 +53,8 @@ SERVICES = {
 
     # Experiment Tracking
     "aim": {"name": "AIM", "url": f"http://{SERVICE_HOST}:43800/", "category": "mlops"},
-    "prefect": {"name": "Prefect", "url": f"http://{SERVICE_HOST}:4200/api/health", "category": "mlops"},
+    # Prefect removed from stack; keep placeholder disabled
+    # "prefect": {"name": "Prefect", "url": f"http://{SERVICE_HOST}:4200/api/health", "category": "mlops"},
     "great_expectations": {"name": "Great Expectations", "url": f"http://{SERVICE_HOST}:8084/", "category": "mlops"},
 
     # Annotation

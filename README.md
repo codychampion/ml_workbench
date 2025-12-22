@@ -1,329 +1,119 @@
 # MLOps Workbench
 
-A comprehensive, self-hosted ML/AI pipeline workbench with a **pipeline-based architecture** for data collection, annotation, training, evaluation, and inference.
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────────────┐
-│  INFRASTRUCTURE SERVICES                                                          │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
-│  │   AIM    │ │  Vault   │ │ LiteLLM  │ │ JuiceFS  │ │ MongoDB  │ │  Redis   │  │
-│  │  :43800  │ │  :8200   │ │  :4000   │ │(storage) │ │  (meta)  │ │ (cache)  │  │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  DATA TOOLS                                                                       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐               │
-│  │ FiftyOne │ │  Label   │ │   CVAT   │ │Spotlight │ │ ComfyUI  │               │
-│  │  :5151   │ │  Studio  │ │  :8082   │ │  :8083   │ │  :8188   │               │
-│  │  (viz)   │ │  :8081   │ │ (video)  │ │(explore) │ │  (gen)   │               │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘               │
-├──────────────────────────────────────────────────────────────────────────────────┤
-│  PIPELINE STAGES                                                                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐               │
-│  │ 1.collect│→│2.annotate│→│ 3.train  │→│4.evaluate│→│ 5.infer  │               │
-│  │  (data)  │ │(caption) │ │  (LoRA)  │ │(metrics) │ │  (gen)   │               │
-│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘               │
-└──────────────────────────────────────────────────────────────────────────────────┘
-```
-
-## Services Overview
-
-| Service | Port | Description |
-|---------|------|-------------|
-| **AIM** | 43800 | Experiment tracking (replaces W&B) |
-| **Vault** | 8200 | Secrets management |
-| **LiteLLM** | 4000 | LLM API gateway (OpenAI-compatible) |
-| **FiftyOne** | 5151 | Dataset visualization |
-| **Label Studio** | 8081 | Image/text annotation |
-| **CVAT** | 8082 | Video annotation |
-| **Spotlight** | 8083 | Data exploration (Renumics) |
-| **ComfyUI** | 8188 | Image generation workflows |
-
----
+Self-hosted ML pipeline workbench with profile-based services.
 
 ## Quick Start
 
 ```bash
-# Build all images
-docker-compose build
+# Start core (MinIO only)
+docker compose up -d
 
-# Start infrastructure services
-docker-compose up -d
+# Add Khoj chat interface
+docker compose --profile chat up -d
 
-# Run pipeline stages
-docker-compose run --rm collect python -m pipelines.collect.collect --subreddit earthporn
-docker-compose run --rm annotate python -m pipelines.annotate.caption --input-dir ./data/collected
-docker-compose run --rm train python -m pipelines.train.finetune --dataset ./data/collected
-docker-compose run --rm evaluate python -m pipelines.evaluate.metrics --predictions ./outputs
-docker-compose run --rm infer python -m pipelines.infer.run_generation --prompts "A sunset"
-
-# Dev shell with all tools
-docker-compose --profile dev up -d dev
-docker-compose exec dev bash
-
-# Stop everything
-docker-compose down
+# Run a pipeline
+docker compose --profile pipeline run --rm train python -m pipelines.train.train_lora
 ```
 
----
+## Profiles
+
+| Profile | Command | Services |
+|---------|---------|----------|
+| (default) | `docker compose up -d` | MinIO (S3 storage) |
+| chat | `--profile chat` | Khoj + Postgres |
+| cv_ui | `--profile cv_ui` | FiftyOne + MongoDB |
+| labeling | `--profile labeling` | Label Studio |
+| tracking | `--profile tracking` | AIM |
+| registry | `--profile registry` | Docker Registry |
+| pipeline | `--profile pipeline run --rm <stage>` | Pipeline containers |
+| dev | `--profile dev` | Dev shell |
+| test | `--profile test run --rm test` | Tests |
+
+## Web UIs
+
+| Service | URL | Profile |
+|---------|-----|---------|
+| MinIO Console | http://localhost:9001 | (default) |
+| Khoj | http://localhost:42110 | chat |
+| FiftyOne | http://localhost:5151 | cv_ui |
+| Label Studio | http://localhost:8081 | labeling |
+| AIM | http://localhost:43800 | tracking |
+
+## Workflow
+
+```
+1. Plan          → knowledge/experiments/plans/
+2. Collect       → docker compose --profile pipeline run --rm collect ...
+3. Annotate      → docker compose --profile pipeline run --rm annotate ...
+4. Train         → docker compose --profile pipeline run --rm train ...
+5. Evaluate      → docker compose --profile pipeline run --rm evaluate ...
+6. Infer         → docker compose --profile pipeline run --rm infer ...
+7. Ingest run    → python scripts/ingest_aim_run.py
+8. Register model→ python scripts/register_model_image.py <model_id>
+```
+
+## Knowledge Vault
+
+Open `./knowledge/` in Obsidian. Structure:
+- `papers/notes/` - Paper notes
+- `experiments/plans/` - Experiment plans
+- `experiments/runs/` - Run summaries (auto-generated)
+- `models/registry/` - Model registry
+
+Khoj indexes the vault for AI chat.
+
+## Configuration
+
+Copy `.env.example` to `.env`. Key vars:
+- `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY` - MinIO/S3
+- `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` - For Khoj chat
+
+## Scripts
+
+```bash
+python scripts/new_experiment.py "My experiment"    # Create plan
+python scripts/ingest_aim_run.py --run <hash>       # Ingest AIM run
+python scripts/register_model_image.py <model_id>   # Register model
+python scripts/labelstudio_sync.py export --dataset my-ds  # Export to LS
+```
+
+## Pipeline Stages
+
+```bash
+# Collect
+docker compose --profile pipeline run --rm collect \
+  python -m pipelines.collect.collect --subreddit earthporn
+
+# Annotate
+docker compose --profile pipeline run --rm annotate \
+  python -m pipelines.annotate.auto_caption --input ./data/collected
+
+# Train
+docker compose --profile pipeline run --rm train \
+  python -m pipelines.train.train_lora --epochs 10
+
+# Evaluate
+docker compose --profile pipeline run --rm evaluate \
+  python -m pipelines.evaluate.benchmark --model ./models/lora
+
+# Infer
+docker compose --profile pipeline run --rm infer \
+  python -m pipelines.infer.run_generation --prompt "A sunset"
+```
 
 ## Project Structure
 
 ```
 ml_workbench/
-├── pipelines/                      # Pipeline stages
-│   ├── collect/                    # Stage 1: Data collection
-│   │   ├── Dockerfile
-│   │   └── collect.py              # Reddit/gallery-dl scraping
-│   │
-│   ├── annotate/                   # Stage 2: Data annotation
-│   │   ├── Dockerfile
-│   │   ├── caption.py              # Auto-captioning
-│   │   ├── models.py               # Model configs
-│   │   └── create_dataset.py       # FiftyOne dataset creation
-│   │
-│   ├── train/                      # Stage 3: Model training
-│   │   ├── Dockerfile
-│   │   ├── finetune.py             # Captioner fine-tuning
-│   │   └── train_lora.py           # LoRA training
-│   │
-│   ├── evaluate/                   # Stage 4: Evaluation
-│   │   ├── Dockerfile
-│   │   ├── benchmark.py            # Performance benchmarks
-│   │   └── metrics.py              # BLEU/ROUGE metrics
-│   │
-│   └── infer/                      # Stage 5: Inference
-│       ├── Dockerfile
-│       ├── run_generation.py       # Image generation
-│       └── generate_patch.py       # Adversarial patches
-│
-├── services/                       # Long-running services
-│   ├── fiftyone/                   # Dataset visualization
-│   ├── spotlight/                  # Data exploration
-│   └── comfyui/                    # Image generation UI
-│
-├── docker/                         # Docker configs
-│   ├── base/                       # Base Dockerfiles
-│   ├── init-scripts/               # PostgreSQL init
-│   ├── litellm/                    # LiteLLM config
-│   └── vault/                      # Vault config
-│
-├── data/                           # Data directories
-│   ├── raw/                        # Raw collected data
-│   ├── collected/                  # Processed collections
-│   └── processed/                  # Annotated data
-│
-├── models/                         # Trained models
-├── outputs/                        # Pipeline outputs
-│   ├── aim/                        # AIM experiment logs
-│   └── checkpoints/                # Model checkpoints
-│
-├── docker-compose.yml              # Main orchestration
-├── config.py                       # Central configuration
-├── dvc.yaml                        # DVC pipeline definition
-└── params.yaml                     # Pipeline parameters
+├── conf/              # Hydra config
+├── data_transfer/     # S3 client
+├── docker/            # Docker configs
+├── knowledge/         # Obsidian vault
+├── models/            # Model artifacts
+├── outputs/           # Pipeline outputs, AIM logs
+├── pipelines/         # Pipeline stages
+├── scripts/           # Glue scripts
+├── services/          # FiftyOne service
+├── tests/             # Integration tests
+└── utils/             # Utilities
 ```
-
----
-
-## Pipeline Stages
-
-### 1. Collect - Data Gathering
-```bash
-# Collect images from Reddit
-docker-compose run --rm collect python -m pipelines.collect.collect \
-    --subreddit earthporn --limit 100
-
-# Collect from URL
-docker-compose run --rm collect python -m pipelines.collect.collect \
-    --url "https://reddit.com/r/art/top"
-```
-
-### 2. Annotate - Auto-Captioning
-```bash
-# Caption collected images
-docker-compose run --rm annotate python -m pipelines.annotate.caption \
-    --input-dir ./data/collected --model blip-base
-
-# Create FiftyOne dataset
-docker-compose run --rm annotate python -m pipelines.annotate.create_dataset \
-    --input-dir ./data/collected --name my-dataset
-```
-
-### 3. Train - Model Fine-Tuning
-```bash
-# Fine-tune captioner with LoRA
-docker-compose run --rm train python -m pipelines.train.finetune \
-    --dataset ./data/collected --model blip-base --epochs 3
-
-# Train LoRA for image generation
-docker-compose run --rm train python -m pipelines.train.train_lora \
-    --epochs 10 --lora-rank 16
-```
-
-### 4. Evaluate - Metrics & Benchmarks
-```bash
-# Run benchmarks
-docker-compose run --rm evaluate python -m pipelines.evaluate.benchmark \
-    --model ./models/captioner
-
-# Calculate metrics
-docker-compose run --rm evaluate python -m pipelines.evaluate.metrics \
-    --predictions ./outputs/predictions.json
-```
-
-### 5. Infer - Generation
-```bash
-# Generate images
-docker-compose run --rm infer python -m pipelines.infer.run_generation \
-    --prompts "A mountain at sunset" "A futuristic city"
-```
-
----
-
-## DVC Pipeline
-
-Run the full pipeline with DVC:
-
-```bash
-# Run full pipeline
-dvc repro
-
-# Run specific stage
-dvc repro train-captioner
-
-# View pipeline graph
-dvc dag
-```
-
----
-
-## Self-Hosted Services
-
-All services are self-hosted with no external API dependencies:
-
-### AIM - Experiment Tracking
-```bash
-# Access UI
-open http://localhost:43800
-
-# Python usage
-from aim import Run
-run = Run(repo="./outputs/aim")
-run.track(loss, name="loss", epoch=epoch)
-```
-
-### Vault - Secrets Management
-```bash
-# Access UI (dev token: mlops-dev-token)
-open http://localhost:8200
-
-# Store a secret
-vault kv put secret/mlops/api-keys openai=sk-xxx
-```
-
-### LiteLLM - LLM Gateway
-```bash
-# OpenAI-compatible API
-curl http://localhost:4000/v1/chat/completions \
-    -H "Authorization: Bearer sk-mlops-dev-key" \
-    -d '{"model": "ollama/mistral", "messages": [{"role": "user", "content": "Hello"}]}'
-```
-
-### CVAT - Video Annotation
-```bash
-# Access UI
-open http://localhost:8082
-
-# Default credentials: admin/admin
-```
-
-### Label Studio - Data Labeling
-```bash
-# Access UI
-open http://localhost:8081
-```
-
-### Renumics Spotlight - Data Exploration
-```bash
-# Access UI
-open http://localhost:8083
-```
-
----
-
-## Configuration
-
-All configuration is managed via environment variables or `config.py`:
-
-```python
-from config import get_config, get_secret
-
-config = get_config()
-
-# AIM tracking
-print(config.aim.repo)           # ./outputs/aim
-print(config.aim.server)         # http://aim:53800
-
-# Vault secrets
-api_key = get_secret("mlops/api-keys", "openai")
-
-# LiteLLM
-print(config.litellm.api_base)   # http://litellm:4000
-```
-
----
-
-## Common Commands
-
-```bash
-# Build
-docker-compose build
-
-# Start services
-docker-compose up -d
-
-# Run pipeline stage
-docker-compose run --rm <stage> <command>
-
-# View logs
-docker-compose logs -f aim
-
-# Stop all
-docker-compose down
-
-# Stop + remove volumes
-docker-compose down -v
-
-# GPU support (when available)
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-```
-
----
-
-## Adding New Pipeline Stages
-
-1. Create `pipelines/my-stage/Dockerfile`:
-```dockerfile
-FROM python:3.13-slim
-LABEL pipeline.stage="my-stage"
-WORKDIR /workspace
-COPY pipelines/my-stage/ /workspace/pipelines/my-stage/
-RUN pip install -r pipelines/my-stage/requirements.txt
-```
-
-2. Add to `docker-compose.yml`:
-```yaml
-my-stage:
-  build:
-    dockerfile: pipelines/my-stage/Dockerfile
-  profiles:
-    - pipeline
-```
-
-3. Run: `docker-compose run --rm my-stage python -m pipelines.my_stage.main`
-
----
-
-*Self-hosted MLOps: AIM tracking, JuiceFS storage, Vault secrets, LiteLLM gateway*

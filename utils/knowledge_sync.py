@@ -22,10 +22,12 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+import json
 
 # Configuration
 KNOWLEDGE_DIR = Path(os.environ.get("KNOWLEDGE_DIR", "./knowledge"))
 AIM_REPO = os.environ.get("AIM_REPO", "./outputs/aim")
+MANIFEST_DIR = Path(os.environ.get("MANIFEST_DIR", KNOWLEDGE_DIR / "datasets" / "manifests"))
 
 # Service URLs
 ZOTERO_URL = os.environ.get("ZOTERO_URL", "http://localhost:8085")
@@ -462,6 +464,74 @@ print(dataset)
 
 
 # =============================================================================
+# Manifest Sync
+# =============================================================================
+
+def sync_manifests():
+    """Sync collection/annotation manifests into Obsidian markdown."""
+    collections_dir = KNOWLEDGE_DIR / "collections"
+    annotations_dir = KNOWLEDGE_DIR / "annotations"
+    collections_dir.mkdir(parents=True, exist_ok=True)
+    annotations_dir.mkdir(parents=True, exist_ok=True)
+
+    for manifest_path in MANIFEST_DIR.glob("*.json"):
+        try:
+            data = json.loads(manifest_path.read_text())
+        except Exception as e:
+            print(f"[Manifests] Skipping {manifest_path}: {e}")
+            continue
+
+        manifest_type = data.get("type")
+        if manifest_type == "collection":
+            out_path = collections_dir / f"{data.get('id', manifest_path.stem)}.md"
+            write_manifest_markdown(out_path, data)
+        elif manifest_type == "annotation":
+            out_path = annotations_dir / f"{data.get('id', manifest_path.stem)}.md"
+            write_manifest_markdown(out_path, data)
+
+
+def write_manifest_markdown(path: Path, manifest: Dict[str, Any]) -> None:
+    """Render a manifest JSON into Obsidian-friendly markdown."""
+    frontmatter = {
+        "id": manifest.get("id"),
+        "type": manifest.get("type"),
+        "name": manifest.get("name"),
+        "created": manifest.get("created_at"),
+        "output_dir": manifest.get("output_dir"),
+        "counts": manifest.get("counts", {}),
+        "source": manifest.get("source", {}),
+        "params": manifest.get("params", {}),
+        "parent_collection_id": manifest.get("parent_collection_id"),
+        "git": manifest.get("git", {}),
+        "links": {
+            "collection": f"[[collections/{manifest.get('parent_collection_id')}]]" if manifest.get("parent_collection_id") else None
+        }
+    }
+    fm_lines = ["---"]
+    for k, v in frontmatter.items():
+        if v is None or v == {}:
+            continue
+        fm_lines.append(f"{k}: {json.dumps(v)}" if not isinstance(v, str) else f"{k}: \"{v}\"")
+    fm_lines.append("---")
+
+    body = [
+        f"# {manifest.get('name') or manifest.get('id')}",
+        "",
+        f"**Type:** {manifest.get('type')}",
+        f"**Created:** {manifest.get('created_at')}",
+        f"**Output:** {manifest.get('output_dir')}",
+        "",
+        "## Counts",
+        f"{manifest.get('counts', {})}",
+        "",
+        "## Git",
+        f"{manifest.get('git', {})}",
+        "",
+    ]
+    path.write_text("\n".join(fm_lines + body))
+
+
+# =============================================================================
 # Main
 # =============================================================================
 
@@ -471,6 +541,7 @@ def sync_all():
     sync_aim_experiments()
     sync_zotero_papers()
     sync_fiftyone_datasets()
+    sync_manifests()
 
 
 def main():

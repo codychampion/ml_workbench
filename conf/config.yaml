@@ -18,10 +18,10 @@
 defaults:
   - _self_
   - infrastructure: default
-  - pipeline: train
+  - pipeline: collect
   - experiment: default
-  - override hydra/job_logging: colorlog
-  - override hydra/hydra_logging: colorlog
+  - override hydra/job_logging: default
+  - override hydra/hydra_logging: default
 
 # =============================================================================
 # Project Settings

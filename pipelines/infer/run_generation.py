@@ -28,27 +28,22 @@ import numpy as np
 from PIL import Image
 import torch
 
-# Prefect for workflow orchestration
-try:
-    from prefect import flow, task
-    PREFECT_AVAILABLE = True
-except ImportError:
-    PREFECT_AVAILABLE = False
-    # Provide no-op decorators when Prefect is not available
-    def flow(*args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator if not args or callable(args[0]) else decorator
-    def task(*args, **kwargs):
-        def decorator(fn):
-            return fn
-        return decorator if not args or callable(args[0]) else decorator
+# No-op decorators (Prefect removed)
+def flow(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    return decorator if not args or callable(args[0]) else decorator
+
+def task(*args, **kwargs):
+    def decorator(fn):
+        return fn
+    return decorator if not args or callable(args[0]) else decorator
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from config import get_config
-from data_transfer import B2Client
+from utils.storage import get_s3_client
 
 # AIM for experiment tracking
 try:
@@ -193,9 +188,9 @@ def run_generation_pipeline(
     # Step 1: Initialize AIM tracking
     run = init_aim(pipeline_config)
 
-    # Step 2: Initialize B2 client (mocked) and check for any input data
-    b2_client = B2Client()
-    available_files = b2_client.list_files(prefix="datasets/")
+    # Step 2: Initialize S3-compatible client and check for any input data
+    s3_client = get_s3_client(bucket="mlops-data")
+    available_files = s3_client.list_objects(prefix="datasets/") if s3_client else []
     print(f"[Pipeline] Found {len(available_files)} files in storage")
 
     # Log data inventory
@@ -237,13 +232,13 @@ def run_generation_pipeline(
 
         print(f"[Pipeline] Saved: {image_path}")
 
-    # Step 5: Upload results to B2 (mocked)
-    print("\n[Pipeline] Uploading results to storage...")
-    for path in generated_paths:
-        b2_client.upload_file(
-            source=path,
-            destination_name=f"outputs/flux-comfyui/{path.name}"
-        )
+    # Step 5: Upload results to S3 (if configured)
+    if s3_client:
+        print("\n[Pipeline] Uploading results to storage...")
+        for path in generated_paths:
+            dest_key = f"outputs/flux-comfyui/{path.name}"
+            s3_client.upload_file(path, dest_key)
+            print(f"[Storage] Uploaded {dest_key}")
 
     # Log final summary to AIM
     if run:

@@ -1,872 +1,247 @@
-# =============================================================================
-# MLOps Workbench - Pipeline-Based Architecture
-# =============================================================================
+# MLOps Workbench - Lean Profile-Based Architecture
 #
-# Pipeline Stages:
-#   1. collect   - Data gathering (Reddit, gallery-dl)
-#   2. annotate  - Auto-captioning & labeling
-#   3. train     - Model fine-tuning (LoRA, captioners)
-#   4. evaluate  - Benchmarks & metrics
-#   5. infer     - Model inference & generation
-#
-# Infrastructure Services:
-#   - MinIO       - S3-compatible object storage (mimics B2/AWS locally)
-#   - AIM         - Experiment tracking (replaces W&B)
-#   - Prefect     - Workflow orchestration (DAG pipelines)
-#   - Label Studio - Image/text labeling
-#   - HashiCorp Vault - Secrets management
-#   - LiteLLM     - LLM API gateway
-#   - FiftyOne    - Dataset visualization
-#   - Khoj        - AI assistant for searching notes/papers
-#   - Obsidian    - Knowledge base (via CouchDB LiveSync)
-#   - Zotero      - Reference manager for academic papers
-#
-# Storage Strategy:
-#   MinIO provides S3-compatible API locally. To migrate to cloud:
-#   - Backblaze B2: Set S3_ENDPOINT=https://s3.us-west-000.backblazeb2.com
-#   - AWS S3: Set S3_ENDPOINT=https://s3.us-east-1.amazonaws.com
-#   No code changes needed - just update environment variables!
-#
-# Usage:
-#   docker-compose up -d                           # Start services
-#   docker-compose run --rm collect <cmd>          # Run collection
-#   docker-compose run --rm annotate <cmd>         # Run annotation
-#   docker-compose run --rm train <cmd>            # Run training
-#   docker-compose run --rm evaluate <cmd>         # Run evaluation
-#   docker-compose run --rm infer <cmd>            # Run inference
-#
-# Web UIs:
-#   - MinIO Console:       http://localhost:9001
-#   - AIM:                 http://localhost:43800
-#   - Prefect:             http://localhost:4200
-#   - Label Studio:        http://localhost:8081
-#   - FiftyOne:            http://localhost:5151
-#   - Khoj:                http://localhost:42110
-#   - Obsidian LiveSync:   http://localhost:5984/_utils (CouchDB)
-#   - Zotero:              http://localhost:8085
-#   - Vault:               http://localhost:8200
-#   - LiteLLM:             http://localhost:4000
-#
-# =============================================================================
-
-version: '3.8'
+# Default (MinIO only): docker compose up -d
+# Profiles:
+#   chat:     docker compose --profile chat up -d
+#   cv_ui:    docker compose --profile cv_ui up -d
+#   labeling: docker compose --profile labeling up -d
+#   tracking: docker compose --profile tracking up -d
+#   registry: docker compose --profile registry up -d
+#   pipeline: docker compose --profile pipeline run --rm train <cmd>
+#   dev:      docker compose --profile dev up -d
+#   test:     docker compose --profile test run --rm test
 
 services:
-
-  # ===========================================================================
-  # CORE INFRASTRUCTURE
-  # ===========================================================================
-
-  # MinIO - S3-compatible object storage (mimics Backblaze B2)
+  # === CORE (always on) ===
   minio:
     image: minio/minio:RELEASE.2024-01-16T16-07-38Z
     container_name: mlops-minio
     restart: unless-stopped
-    ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Console UI
-    volumes:
-      - minio-data:/data
+    ports: ["9000:9000", "9001:9001"]
+    volumes: [minio-data:/data]
     environment:
-      - MINIO_ROOT_USER=mlops-admin
-      - MINIO_ROOT_PASSWORD=mlops-dev-password
-      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-mlops-admin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-mlops-dev-password}
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
+    networks: [mlops-network]
 
-  # MinIO Client - Creates default buckets on startup
   minio-init:
     image: minio/mc:RELEASE.2024-01-16T16-06-34Z
-    container_name: mlops-minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set myminio http://minio:9000 mlops-admin mlops-dev-password;
-      mc mb --ignore-existing myminio/mlops-data;
-      mc mb --ignore-existing myminio/mlops-models;
-      mc mb --ignore-existing myminio/mlops-outputs;
-      mc anonymous set download myminio/mlops-outputs;
-      echo 'MinIO buckets initialized successfully';
-      "
-    networks:
-      - mlops-network
+    depends_on: {minio: {condition: service_healthy}}
+    entrypoint: /bin/sh -c "mc alias set m http://minio:9000 $${S3_ACCESS_KEY:-mlops-admin} $${S3_SECRET_KEY:-mlops-dev-password} && mc mb --ignore-existing m/mlops-data m/mlops-models m/mlops-outputs"
+    networks: [mlops-network]
     restart: "no"
 
-  # MongoDB - Database for FiftyOne and metadata
-  mongodb:
-    image: mongo:7.0
-    container_name: mlops-mongodb
-    restart: unless-stopped
-    volumes:
-      - mongodb-data:/data/db
-    environment:
-      - MONGO_INITDB_DATABASE=fiftyone
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-
-  # Redis - Backend for JuiceFS and caching
-  redis:
-    image: redis:7-alpine
-    container_name: mlops-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-
-  # PostgreSQL - Backend for Khoj and LiteLLM (with pgvector for embeddings)
+  # === CHAT PROFILE ===
   postgres:
     image: pgvector/pgvector:pg15
-    container_name: mlops-postgres
+    profiles: [chat]
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./docker/init-scripts:/docker-entrypoint-initdb.d:ro
+      - ./docker/init-scripts/create-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multi.sh:ro
     environment:
-      - POSTGRES_USER=mlops
-      - POSTGRES_PASSWORD=mlops_dev_password
-      - POSTGRES_MULTIPLE_DATABASES=khoj,litellm
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mlops"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_dev_password}
+      POSTGRES_DB: khoj
+      POSTGRES_MULTIPLE_DATABASES: khoj,mlops
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U mlops"], interval: 10s, timeout: 5s, retries: 5}
+    networks: [mlops-network]
 
-  # ===========================================================================
-  # EXPERIMENT TRACKING - AIM (replaces W&B)
-  # ===========================================================================
-
-  aim:
-    image: aimstack/aim:3.19.3
-    container_name: mlops-aim
-    restart: unless-stopped
-    ports:
-      - "43800:43800"  # AIM UI
-      - "53800:53800"  # AIM tracking server
-    volumes:
-      - aim-data:/aim
-      - ./outputs:/outputs:ro
-    environment:
-      - AIM_UI_BASE_PATH=/
-    command: up --host 0.0.0.0 --port 43800
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:43800"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-
-  # ===========================================================================
-  # DATA LABELING - Label Studio (Images/Text) with MinIO S3 Backend
-  # ===========================================================================
-
-  label-studio:
-    image: heartexlabs/label-studio:1.11.0
-    container_name: mlops-label-studio
-    restart: unless-stopped
-    depends_on:
-      minio:
-        condition: service_healthy
-    ports:
-      - "8081:8080"
-    volumes:
-      - label-studio-data:/label-studio/data
-      - ./data:/label-studio/files:ro
-    environment:
-      - LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true
-      - LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files
-      # MinIO S3 Cloud Storage Backend
-      - LABEL_STUDIO_CLOUD_STORAGE_ENABLED=true
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT=http://minio:9000
-      - AWS_S3_REGION_NAME=us-east-1
-      - S3_USE_ACCELERATE_ENDPOINT=false
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
-
-  # ===========================================================================
-  # SECRETS MANAGEMENT - HashiCorp Vault
-  # ===========================================================================
-
-  vault:
-    image: hashicorp/vault:1.15.4
-    container_name: mlops-vault
-    restart: unless-stopped
-    ports:
-      - "8200:8200"
-    environment:
-      - VAULT_DEV_ROOT_TOKEN_ID=mlops-dev-token
-      - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
-      - VAULT_ADDR=http://127.0.0.1:8200
-    cap_add:
-      - IPC_LOCK
-    command: server -dev -dev-root-token-id=mlops-dev-token
-    healthcheck:
-      test: ["CMD", "vault", "status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-
-  # ===========================================================================
-  # WORKFLOW ORCHESTRATION - Prefect
-  # ===========================================================================
-  # Self-hosted Prefect server for pipeline orchestration.
-  # UI: http://localhost:4200
-
-  prefect-server:
-    image: prefecthq/prefect:2-python3.11
-    container_name: mlops-prefect
-    restart: unless-stopped
-    ports:
-      - "4200:4200"
-    volumes:
-      - prefect-data:/root/.prefect
-    environment:
-      - PREFECT_SERVER_API_HOST=0.0.0.0
-      - PREFECT_API_URL=http://prefect-server:4200/api
-    command: prefect server start
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-
-  # ===========================================================================
-  # LLM API GATEWAY - LiteLLM
-  # ===========================================================================
-
-  litellm:
-    image: ghcr.io/berriai/litellm:main-v1.55.8
-    container_name: mlops-litellm
-    restart: unless-stopped
-    depends_on:
-      vault:
-        condition: service_healthy
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./docker/litellm/config.yaml:/app/config.yaml:ro
-    environment:
-      - LITELLM_MASTER_KEY=sk-mlops-dev-key
-      - DATABASE_URL=postgresql://mlops:mlops_dev_password@postgres:5432/litellm
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-    command: --config /app/config.yaml --port 4000
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-
-  # ===========================================================================
-  # KNOWLEDGE BASE - Khoj + Obsidian + Zotero Stack
-  # ===========================================================================
-  # - Khoj: AI assistant that searches and chats with your notes/papers
-  # - Obsidian LiveSync: CouchDB backend for Obsidian sync across devices
-  # - Zotero: Reference manager for academic papers
-
-  # Khoj - AI Personal Assistant (searches notes, papers, conversations)
   khoj:
     image: ghcr.io/khoj-ai/khoj:latest
-    container_name: mlops-khoj
+    profiles: [chat]
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "42110:42110"
+    depends_on: {postgres: {condition: service_healthy}}
+    ports: ["42110:42110"]
     volumes:
       - khoj-data:/root/.khoj
-      - obsidian-vault:/data/obsidian:ro
-      - zotero-data:/data/zotero:ro
-      - ./outputs:/data/outputs:ro
       - ./knowledge:/data/knowledge
+      - ./:/data/repo:ro
+      - ./outputs:/data/outputs:ro
     environment:
-      - KHOJ_ADMIN_EMAIL=admin@mlops.local
-      - KHOJ_ADMIN_PASSWORD=mlops-dev-password
-      - KHOJ_DEBUG=false
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_USER=mlops
-      - POSTGRES_PASSWORD=mlops_dev_password
-      - POSTGRES_DB=khoj
-      # LiteLLM for AI chat
-      - OPENAI_API_BASE=http://litellm:4000/v1
-      - OPENAI_API_KEY=sk-mlops-dev-key
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:42110/api/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
+      KHOJ_ADMIN_EMAIL: ${KHOJ_ADMIN_EMAIL:-admin@mlops.local}
+      KHOJ_ADMIN_PASSWORD: ${KHOJ_ADMIN_PASSWORD:-mlops-dev-password}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-mlops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlops_dev_password}
+      POSTGRES_DB: khoj
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Offline-friendly defaults to avoid blocking startup when huggingface is unreachable
+      HF_HUB_OFFLINE: "0"
+      DISABLE_MODEL_DOWNLOADS: "0"
+      ANONYMOUS_MODE: "true"
+      GITHUB_TOKEN: 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
+    networks: [mlops-network]
 
-  # CouchDB - Backend for Obsidian LiveSync plugin
-  obsidian-couchdb:
-    image: couchdb:3.3.3
-    container_name: mlops-obsidian-couchdb
+  watcher:
+    build: {context: ., dockerfile: services/watcher/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    environment:
+      KNOWLEDGE_DIR: /workspace/knowledge
+      WATCH_INTERVAL_SECONDS: 300
+      AIM_REPO: /workspace/outputs/aim
+    volumes:
+      - .:/workspace:cached
+      - ./outputs:/workspace/outputs
+      - ./knowledge:/workspace/knowledge
+    networks: [mlops-network]
+
+  # === CV_UI PROFILE ===
+  mongodb:
+    image: mongo:7.0
+    profiles: [cv_ui]
     restart: unless-stopped
-    ports:
-      - "5984:5984"
-    volumes:
-      - couchdb-data:/opt/couchdb/data
-    environment:
-      - COUCHDB_USER=obsidian
-      - COUCHDB_PASSWORD=mlops-dev-password
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-
-  # Obsidian Vault Storage (shared volume for Khoj indexing)
-  obsidian-init:
-    image: alpine:latest
-    container_name: mlops-obsidian-init
-    volumes:
-      - obsidian-vault:/vault
-    command: >
-      /bin/sh -c "
-      mkdir -p /vault/.obsidian;
-      echo 'Obsidian vault initialized';
-      "
-    networks:
-      - mlops-network
-    restart: "no"
-
-  # Zotero Web Server (translation-server for paper import)
-  zotero:
-    build:
-      context: .
-      dockerfile: services/zotero/Dockerfile
-    image: mlops-zotero:latest
-    container_name: mlops-zotero
-    restart: unless-stopped
-    ports:
-      - "8085:8085"
-    volumes:
-      - zotero-data:/data/zotero
-      - zotero-storage:/data/storage
-    environment:
-      - ZOTERO_DATA_DIR=/data/zotero
-      - ZOTERO_STORAGE_DIR=/data/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 20s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-
-  # ===========================================================================
-  # DATASET VISUALIZATION - FiftyOne with MinIO S3 Backend
-  # ===========================================================================
+    volumes: [mongodb-data:/data/db]
+    healthcheck: {test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"], interval: 30s, timeout: 10s, retries: 3}
+    networks: [mlops-network]
 
   fiftyone:
-    build:
-      context: .
-      dockerfile: services/fiftyone/Dockerfile
-    image: mlops-fiftyone:latest
-    container_name: mlops-fiftyone
+    build: {context: ., dockerfile: services/fiftyone/Dockerfile}
+    profiles: [cv_ui]
     restart: unless-stopped
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    ports:
-      - "5151:5151"
-    volumes:
-      - fiftyone-data:/workspace/fiftyone/datasets
-      - ./data:/workspace/data:ro
+    depends_on: {mongodb: {condition: service_healthy}, minio: {condition: service_healthy}}
+    ports: ["5151:5151"]
+    volumes: [fiftyone-data:/workspace/fiftyone/datasets, ./data:/workspace/data:ro]
     environment:
-      - FIFTYONE_APP_ADDRESS=0.0.0.0
-      - FIFTYONE_APP_PORT=5151
-      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      # MinIO S3 Backend for FiftyOne
-      - AWS_ACCESS_KEY_ID=mlops-admin
-      - AWS_SECRET_ACCESS_KEY=mlops-dev-password
-      - AWS_S3_ENDPOINT_URL=http://minio:9000
-      - AWS_DEFAULT_REGION=us-east-1
-      - FIFTYONE_DEFAULT_DATASET_DIR=/workspace/fiftyone/datasets
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5151"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    networks:
-      - mlops-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 4G
+      FIFTYONE_DATABASE_URI: mongodb://mongodb:27017/fiftyone
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-mlops-admin}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-mlops-dev-password}
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+    networks: [mlops-network]
 
-  # ===========================================================================
-  # PIPELINE STAGES (run with: docker-compose run --rm <stage> <command>)
-  # ===========================================================================
+  # === LABELING PROFILE ===
+  label-studio:
+    image: heartexlabs/label-studio:1.11.0
+    profiles: [labeling]
+    restart: unless-stopped
+    depends_on: {minio: {condition: service_healthy}}
+    ports: ["8081:8080"]
+    volumes: [label-studio-data:/label-studio/data, ./data:/label-studio/files:ro]
+    environment:
+      LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED: "true"
+      LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT: /label-studio/files
+      LABEL_STUDIO_USERNAME: ${LABEL_STUDIO_USERNAME:-admin}
+      LABEL_STUDIO_PASSWORD: ${LABEL_STUDIO_PASSWORD:-mlops-dev-password}
+      LABEL_STUDIO_EMAIL: ${LABEL_STUDIO_EMAIL:-admin@mlops.local}
+      LABEL_STUDIO_DISABLE_SIGNUP_WITHOUT_EMAIL_VERIFICATION: "true"
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-mlops-admin}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-mlops-dev-password}
+      AWS_S3_ENDPOINT: http://minio:9000
+    networks: [mlops-network]
 
-  # Stage 1: Data Collection (lightweight, no ML deps)
+  # === TRACKING PROFILE ===
+  aim:
+    image: aimstack/aim:3.19.3
+    profiles: [tracking]
+    restart: unless-stopped
+    ports: ["43800:43800", "53800:53800"]
+    volumes: [aim-data:/aim, ./outputs:/outputs:ro]
+    command: up --host 0.0.0.0 --port 43800
+    networks: [mlops-network]
+
+  # === REGISTRY PROFILE ===
+  registry:
+    image: registry:2
+    profiles: [registry]
+    restart: unless-stopped
+    ports: ["5000:5000"]
+    volumes: [registry-data:/var/lib/registry]
+    networks: [mlops-network]
+
+  # === PIPELINE PROFILE ===
   collect:
-    build:
-      context: .
-      dockerfile: pipelines/collect/Dockerfile
-    image: mlops-collect:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    volumes:
-      - .:/workspace:cached
-      - ./data/raw:/workspace/data/raw
-      - ./data/collected:/workspace/data/collected
-    environment:
-      - COMPUTE_DEVICE=cpu
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-      # S3-compatible storage (MinIO locally, B2/S3 in production)
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=mlops-admin
-      - S3_SECRET_KEY=mlops-dev-password
-      - S3_BUCKET=mlops-data
-      - S3_REGION=us-east-1
-    networks:
-      - mlops-network
-    profiles:
-      - pipeline
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 2G
+    build: {context: ., dockerfile: pipelines/collect/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data/raw:/workspace/data/raw, ./data/collected:/workspace/data/collected]
+    environment: &pipeline_env
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-mlops-admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-mlops-dev-password}
+      S3_BUCKET: mlops-data
+      HF_HOME: /workspace/.cache/huggingface
+      AIM_REPO: /workspace/outputs/aim
+    networks: [mlops-network]
 
-  # Stage 2: Data Annotation (auto-captioning, uses trained models)
   annotate:
-    build:
-      context: .
-      dockerfile: pipelines/annotate/Dockerfile
-    image: mlops-annotate:latest
-    depends_on:
-      - mongodb
-      - aim
-      - minio
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - fiftyone-data:/workspace/fiftyone
-      - huggingface-cache:/workspace/.cache/huggingface
-    environment:
-      - COMPUTE_DEVICE=cpu
-      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      - HF_HOME=/workspace/.cache/huggingface
-      - AIM_REPO=/workspace/outputs/aim
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=mlops-admin
-      - S3_SECRET_KEY=mlops-dev-password
-      - S3_BUCKET=mlops-data
-      - S3_REGION=us-east-1
-    networks:
-      - mlops-network
-    profiles:
-      - pipeline
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
+    build: {context: ., dockerfile: pipelines/annotate/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, huggingface-cache:/workspace/.cache/huggingface]
+    environment: *pipeline_env
+    networks: [mlops-network]
 
-  # Stage 3: Model Training (fine-tuning, LoRA)
   train:
-    build:
-      context: .
-      dockerfile: pipelines/train/Dockerfile
-    image: mlops-train:latest
-    depends_on:
-      - aim
-      - minio
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - ./outputs:/workspace/outputs
-      - huggingface-cache:/workspace/.cache/huggingface
+    build: {context: ., dockerfile: pipelines/train/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
     environment:
-      - COMPUTE_DEVICE=cpu
-      - AIM_REPO=/workspace/outputs/aim
-      - AIM_SERVER=http://aim:53800
-      - HF_HOME=/workspace/.cache/huggingface
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-      - LITELLM_API_BASE=http://litellm:4000
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=mlops-admin
-      - S3_SECRET_KEY=mlops-dev-password
-      - S3_BUCKET=mlops-models
-      - S3_REGION=us-east-1
-    networks:
-      - mlops-network
-    profiles:
-      - pipeline
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 12G
+      <<: *pipeline_env
+      S3_BUCKET: mlops-models
+    networks: [mlops-network]
 
-  # Stage 4: Model Evaluation (benchmarks, metrics)
   evaluate:
-    build:
-      context: .
-      dockerfile: pipelines/evaluate/Dockerfile
-    image: mlops-evaluate:latest
-    depends_on:
-      - aim
-      - mongodb
-      - minio
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - ./outputs:/workspace/outputs
-      - fiftyone-data:/workspace/fiftyone
-      - huggingface-cache:/workspace/.cache/huggingface
+    build: {context: ., dockerfile: pipelines/evaluate/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
     environment:
-      - COMPUTE_DEVICE=cpu
-      - AIM_REPO=/workspace/outputs/aim
-      - AIM_SERVER=http://aim:53800
-      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      - HF_HOME=/workspace/.cache/huggingface
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=mlops-admin
-      - S3_SECRET_KEY=mlops-dev-password
-      - S3_BUCKET=mlops-outputs
-      - S3_REGION=us-east-1
-    networks:
-      - mlops-network
-    profiles:
-      - pipeline
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
+      <<: *pipeline_env
+      S3_BUCKET: mlops-outputs
+    networks: [mlops-network]
 
-  # Stage 5: Model Inference (generation, prediction)
   infer:
-    build:
-      context: .
-      dockerfile: pipelines/infer/Dockerfile
-    image: mlops-infer:latest
-    depends_on:
-      - aim
-      - mongodb
-      - minio
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - ./outputs:/workspace/outputs
-      - fiftyone-data:/workspace/fiftyone
-      - huggingface-cache:/workspace/.cache/huggingface
+    build: {context: ., dockerfile: pipelines/infer/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
     environment:
-      - COMPUTE_DEVICE=cpu
-      - AIM_REPO=/workspace/outputs/aim
-      - AIM_SERVER=http://aim:53800
-      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      - HF_HOME=/workspace/.cache/huggingface
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-      - LITELLM_API_BASE=http://litellm:4000
-      - S3_ENDPOINT=http://minio:9000
-      - S3_ACCESS_KEY=mlops-admin
-      - S3_SECRET_KEY=mlops-dev-password
-      - S3_BUCKET=mlops-outputs
-      - S3_REGION=us-east-1
-    networks:
-      - mlops-network
-    profiles:
-      - pipeline
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
+      <<: *pipeline_env
+      S3_BUCKET: mlops-outputs
+    networks: [mlops-network]
 
-  # ===========================================================================
-  # DEV SHELL (interactive development)
-  # ===========================================================================
-
+  # === DEV PROFILE ===
   dev:
-    build:
-      context: .
-      dockerfile: docker/base/Dockerfile.diffusers
-    image: mlops-dev:latest
-    container_name: mlops-dev
-    depends_on:
-      - aim
-      - mongodb
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - fiftyone-data:/workspace/fiftyone
-      - huggingface-cache:/workspace/.cache/huggingface
-    environment:
-      - MLOPS_ENV=development
-      - DEBUG=true
-      - AIM_REPO=/workspace/outputs/aim
-      - AIM_SERVER=http://aim:53800
-      - FIFTYONE_DATABASE_URI=mongodb://mongodb:27017/fiftyone
-      - HF_HOME=/workspace/.cache/huggingface
-      - COMPUTE_DEVICE=cpu
-      - VAULT_ADDR=http://vault:8200
-      - VAULT_TOKEN=mlops-dev-token
-      - LITELLM_API_BASE=http://litellm:4000
-    ports:
-      - "8888:8888"
+    build: {context: ., dockerfile: docker/base/Dockerfile.diffusers}
+    profiles: [dev]
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, huggingface-cache:/workspace/.cache/huggingface]
+    environment: *pipeline_env
+    ports: ["8888:8888"]
     stdin_open: true
     tty: true
-    networks:
-      - mlops-network
-    profiles:
-      - dev
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
+    networks: [mlops-network]
 
-  # ===========================================================================
-  # INTEGRATION TESTS
-  # ===========================================================================
-  # Runs automatically after all services are healthy.
-  # Usage:
-  #   docker-compose up -d && docker-compose run --rm test
-  #   docker-compose run --rm test                    # Full suite
-  #   docker-compose run --rm -e TEST_MODE=quick test # Quick health checks
-  #   docker-compose run --rm -e TEST_MODE=minio test # Specific category
-
+  # === TEST PROFILE ===
   test:
-    build:
-      context: .
-      dockerfile: tests/docker/Dockerfile
-    image: mlops-test:latest
-    container_name: mlops-test-runner
-    depends_on:
-      minio:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      aim:
-        condition: service_healthy
-      prefect-server:
-        condition: service_healthy
-      vault:
-        condition: service_healthy
-    volumes:
-      - ./tests:/workspace/tests:ro
-      - ./pytest.ini:/workspace/pytest.ini:ro
+    build: {context: ., dockerfile: tests/docker/Dockerfile}
+    profiles: [test]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [./tests:/workspace/tests:ro, ./pytest.ini:/workspace/pytest.ini:ro]
     environment:
-      # Use Docker network hostnames for service access
-      - MINIO_HOST=minio
-      - MONGODB_HOST=mongodb
-      - REDIS_HOST=redis
-      - POSTGRES_HOST=postgres
-      - AIM_HOST=aim
-      - PREFECT_HOST=prefect-server
-      - VAULT_HOST=vault
-      - LITELLM_HOST=litellm
-      - KHOJ_HOST=khoj
-      - COUCHDB_HOST=obsidian-couchdb
-      - ZOTERO_HOST=zotero
-      - LABEL_STUDIO_HOST=label-studio
-      - FIFTYONE_HOST=fiftyone
-      - TEST_MODE=${TEST_MODE:-full}
-      - MAX_WAIT=300
-      - WAIT_INTERVAL=5
-    networks:
-      - mlops-network
-    profiles:
-      - test
-    deploy:
-      resources:
-        limits:
-          cpus: '2'
-          memory: 1G
-
-  # Quick test runner (health checks only)
-  test-quick:
-    build:
-      context: .
-      dockerfile: tests/docker/Dockerfile
-    image: mlops-test:latest
-    container_name: mlops-test-quick
-    depends_on:
-      minio:
-        condition: service_healthy
-    volumes:
-      - ./tests:/workspace/tests:ro
-      - ./pytest.ini:/workspace/pytest.ini:ro
-    environment:
-      # Use Docker network hostnames for service access
-      - MINIO_HOST=minio
-      - MONGODB_HOST=mongodb
-      - REDIS_HOST=redis
-      - POSTGRES_HOST=postgres
-      - AIM_HOST=aim
-      - PREFECT_HOST=prefect-server
-      - VAULT_HOST=vault
-      - TEST_MODE=quick
-      - MAX_WAIT=60
-    networks:
-      - mlops-network
-    profiles:
-      - test
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-
-# =============================================================================
-# VOLUMES
-# =============================================================================
+      MINIO_HOST: minio
+      TEST_MODE: ${TEST_MODE:-full}
+    networks: [mlops-network]
 
 volumes:
   minio-data:
   mongodb-data:
-  redis-data:
   postgres-data:
   aim-data:
   label-studio-data:
-  prefect-data:
   fiftyone-data:
   huggingface-cache:
   khoj-data:
-  obsidian-vault:
-  couchdb-data:
-  zotero-data:
-  zotero-storage:
-
-# =============================================================================
-# NETWORKS
-# =============================================================================
+  registry-data:
 
 networks:
   mlops-network:
-    driver: bridge

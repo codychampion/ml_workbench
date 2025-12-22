@@ -64,6 +64,14 @@ def format_params_table(params: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def render_template(template_path: Path, context: Dict[str, str]) -> str:
+    """Render a simple template using string replacement."""
+    template = template_path.read_text()
+    for key, value in context.items():
+        template = template.replace(f"{{{{{key}}}}}", value)
+    return template
+
+
 def export_run_to_markdown(run) -> str:
     """Export a single AIM run to Obsidian-compatible markdown."""
     run_hash = run.hash
@@ -99,7 +107,18 @@ def export_run_to_markdown(run) -> str:
     # Build markdown content
     tag_str = " ".join(f"#{t}" for t in tags) if tags else "#experiment"
 
-    content = f"""---
+    template_path = Path("./knowledge/templates/run-summary.md")
+    if template_path.exists():
+        context = {
+            "run_id": run_hash[:8],
+            "exp_id": experiment,
+            "date": created_at,
+            "metrics": format_metrics_table(final_metrics),
+            "params": format_params_table(params),
+        }
+        content = render_template(template_path, context)
+    else:
+        content = f"""---
 type: experiment
 experiment: {experiment}
 run_hash: {run_hash}
