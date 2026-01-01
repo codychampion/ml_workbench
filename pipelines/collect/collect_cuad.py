@@ -58,17 +58,41 @@ def download_cuad_task(
     output_dir: Path,
     text_column: str = "text",
 ) -> Dict[str, Any]:
-    """Task wrapper for CUAD dataset download."""
+    """
+    Download and process CUAD dataset from HuggingFace.
+
+    Args:
+        dataset: HuggingFace dataset identifier
+        split: Dataset split to download
+        limit: Maximum samples (-1 for all)
+        output_dir: Base output directory
+        text_column: Name of text column in dataset
+
+    Returns:
+        Dictionary with download statistics
+
+    Raises:
+        RuntimeError: If datasets package not installed
+        ValueError: If dataset/split not found
+    """
     if not HF_AVAILABLE:
-        raise RuntimeError("datasets package not installed. pip install datasets")
+        raise RuntimeError(
+            "datasets package not installed. Install with: pip install datasets"
+        )
 
     print(f"\n{'='*60}")
     print(f"Downloading CUAD Dataset")
     print(f"{'='*60}")
     print(f"Dataset: {dataset} | Split: {split} | Limit: {limit}")
 
-    # Load dataset
-    ds = load_dataset(dataset, split=split, streaming=False)
+    # Load dataset with error handling
+    try:
+        ds = load_dataset(dataset, split=split, streaming=False)
+    except Exception as e:
+        raise ValueError(
+            f"Failed to load dataset '{dataset}' split '{split}': {e}\n"
+            f"Check dataset name and split are valid on HuggingFace Hub"
+        ) from e
 
     # Create output directory
     target_dir = output_dir / split
@@ -83,32 +107,49 @@ def download_cuad_task(
     }
 
     print(f"\nProcessing samples...")
-    with output_file.open("w", encoding="utf-8") as f:
-        for idx, sample in enumerate(ds):
-            if limit > 0 and idx >= limit:
-                break
+    try:
+        with output_file.open("w", encoding="utf-8") as f:
+            for idx, sample in enumerate(ds):
+                if limit > 0 and idx >= limit:
+                    break
 
-            # Extract sample data
-            sample_data = {
-                "id": idx,
-                "text": sample.get(text_column, ""),
-                "text_length": len(sample.get(text_column, "")),
-                "timestamp": datetime.now().isoformat(),
-            }
+                # Validate text column exists
+                if text_column not in sample:
+                    print(f"  Warning: Sample {idx} missing '{text_column}' column, skipping")
+                    continue
 
-            # Add clause annotations
-            for key, value in sample.items():
-                if key != text_column:
-                    sample_data[key] = value
-                    if value:  # Track present categories
-                        stats["clause_categories"].add(key)
+                # Extract sample data
+                sample_data = {
+                    "id": idx,
+                    "text": sample.get(text_column, ""),
+                    "text_length": len(sample.get(text_column, "")),
+                    "timestamp": datetime.now().isoformat(),
+                }
 
-            f.write(json.dumps(sample_data, ensure_ascii=False) + "\n")
-            stats["total_samples"] += 1
-            stats["total_text_length"] += sample_data["text_length"]
+                # Add clause annotations
+                for key, value in sample.items():
+                    if key != text_column:
+                        sample_data[key] = value
+                        if value:  # Track present categories
+                            stats["clause_categories"].add(key)
 
-            if (idx + 1) % 100 == 0:
-                print(f"  Processed {idx + 1} samples...")
+                f.write(json.dumps(sample_data, ensure_ascii=False) + "\n")
+                stats["total_samples"] += 1
+                stats["total_text_length"] += sample_data["text_length"]
+
+                if (idx + 1) % 100 == 0:
+                    print(f"  Processed {idx + 1} samples...")
+
+        if stats["total_samples"] == 0:
+            raise ValueError(
+                f"No samples processed. Check that '{text_column}' column exists in dataset"
+            )
+
+    except IOError as e:
+        raise IOError(
+            f"Failed to write to output file {output_file}: {e}\n"
+            f"Check disk space and write permissions"
+        ) from e
 
     # Save metadata
     metadata = {
