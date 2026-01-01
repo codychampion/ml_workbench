@@ -1,9 +1,4 @@
-"""
-Pipeline Decorators - No-op Flow and Task Decorators
-=====================================================
-Provides no-op @flow and @task decorators for pipeline consistency.
-Previously used Prefect; these maintain the pattern without dependency.
-"""
+"""No-op decorators (Prefect removed). Backward compatibility only."""
 
 from typing import Callable, TypeVar
 
@@ -11,14 +6,14 @@ F = TypeVar('F', bound=Callable)
 
 
 def flow(*args, **kwargs) -> Callable[[F], F]:
-    """No-op flow decorator (Prefect removed)."""
-    def decorator(fn: F) -> F:
-        return fn
-    return decorator if not args or callable(args[0]) else decorator
+    """No-op flow decorator. Returns function unchanged."""
+    if args and callable(args[0]):
+        return args[0]  # @flow without parens
+    return lambda fn: fn  # @flow(...) with parens
 
 
 def task(*args, **kwargs) -> Callable[[F], F]:
-    """No-op task decorator (Prefect removed)."""
-    def decorator(fn: F) -> F:
-        return fn
-    return decorator if not args or callable(args[0]) else decorator
+    """No-op task decorator. Returns function unchanged."""
+    if args and callable(args[0]):
+        return args[0]  # @task without parens
+    return lambda fn: fn  # @task(...) with parens

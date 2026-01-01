@@ -1,14 +1,19 @@
-"""
-Physical Transformations for Adversarial Robustness
-====================================================
-Simulate real-world conditions (lighting, angles, noise) for robust adversarial patches.
-Implements Expectation over Transformation (EoT) training.
-"""
+"""Physical transformations for adversarial robustness (EoT training)."""
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import torch
 import torch.nn.functional as F
-from typing import Dict, Tuple, Optional
-import math
+from typing import Tuple, Optional
+
+from utils.transforms import (
+    apply_affine_transform,
+    create_rotation_matrix,
+    create_scale_matrix,
+    apply_color_jitter
+)
 
 
 class PhysicalTransformPipeline:
@@ -23,17 +28,6 @@ class PhysicalTransformPipeline:
         noise_std: float = 0.01,
         device: str = "cuda"
     ):
-        """
-        Initialize physical transformation pipeline.
-
-        Args:
-            brightness_range: Min/max brightness multiplier
-            contrast_range: Min/max contrast multiplier
-            rotation_range: Min/max rotation in degrees
-            scale_range: Min/max scale factor
-            noise_std: Standard deviation of Gaussian noise
-            device: Device to run on
-        """
         self.brightness_range = brightness_range
         self.contrast_range = contrast_range
         self.rotation_range = rotation_range
@@ -41,71 +35,27 @@ class PhysicalTransformPipeline:
         self.noise_std = noise_std
         self.device = device
 
-    def apply_brightness(self, images: torch.Tensor, factor: Optional[float] = None) -> torch.Tensor:
-        """Apply random brightness adjustment."""
-        if factor is None:
-            factor = torch.empty(images.size(0), 1, 1, 1, device=self.device).uniform_(
-                *self.brightness_range
-            )
-        return torch.clamp(images * factor, 0, 1)
-
-    def apply_contrast(self, images: torch.Tensor, factor: Optional[float] = None) -> torch.Tensor:
-        """Apply random contrast adjustment."""
-        if factor is None:
-            factor = torch.empty(images.size(0), 1, 1, 1, device=self.device).uniform_(
-                *self.contrast_range
-            )
-
-        # Contrast adjustment: (image - mean) * factor + mean
-        mean = images.mean(dim=[2, 3], keepdim=True)
-        return torch.clamp((images - mean) * factor + mean, 0, 1)
-
     def apply_rotation(self, images: torch.Tensor, angle: Optional[float] = None) -> torch.Tensor:
         """Apply random rotation."""
+        B = images.size(0)
         if angle is None:
-            angle = torch.empty(images.size(0), device=self.device).uniform_(
-                *self.rotation_range
-            )
+            angles = torch.empty(B, device=self.device).uniform_(*self.rotation_range)
         else:
-            angle = torch.tensor([angle] * images.size(0), device=self.device)
+            angles = torch.full((B,), angle, device=self.device)
 
-        # Convert to radians
-        angle_rad = angle * math.pi / 180.0
-
-        # Create rotation matrices
-        cos = torch.cos(angle_rad)
-        sin = torch.sin(angle_rad)
-
-        # Affine transformation matrix
-        theta = torch.zeros(images.size(0), 2, 3, device=self.device)
-        theta[:, 0, 0] = cos
-        theta[:, 0, 1] = -sin
-        theta[:, 1, 0] = sin
-        theta[:, 1, 1] = cos
-
-        grid = F.affine_grid(theta, images.size(), align_corners=False)
-        rotated = F.grid_sample(images, grid, align_corners=False, padding_mode='border')
-
-        return rotated
+        theta = create_rotation_matrix(B, angles, self.device)
+        return apply_affine_transform(images, theta)
 
     def apply_scale(self, images: torch.Tensor, scale: Optional[float] = None) -> torch.Tensor:
         """Apply random scaling."""
+        B = images.size(0)
         if scale is None:
-            scale = torch.empty(images.size(0), device=self.device).uniform_(
-                *self.scale_range
-            )
+            scales = torch.empty(B, device=self.device).uniform_(*self.scale_range)
         else:
-            scale = torch.tensor([scale] * images.size(0), device=self.device)
+            scales = torch.full((B,), scale, device=self.device)
 
-        # Create scaling affine matrix
-        theta = torch.zeros(images.size(0), 2, 3, device=self.device)
-        theta[:, 0, 0] = scale
-        theta[:, 1, 1] = scale
-
-        grid = F.affine_grid(theta, images.size(), align_corners=False)
-        scaled = F.grid_sample(images, grid, align_corners=False, padding_mode='border')
-
-        return scaled
+        theta = create_scale_matrix(B, scales, self.device)
+        return apply_affine_transform(images, theta)
 
     def apply_noise(self, images: torch.Tensor, std: Optional[float] = None) -> torch.Tensor:
         """Apply Gaussian noise."""
@@ -135,8 +85,7 @@ class PhysicalTransformPipeline:
 
     def apply_random_transforms(self, images: torch.Tensor) -> torch.Tensor:
         """Apply all random transformations."""
-        images = self.apply_brightness(images)
-        images = self.apply_contrast(images)
+        images = apply_color_jitter(images, self.brightness_range, self.contrast_range, self.device)
         images = self.apply_rotation(images)
         images = self.apply_scale(images)
         images = self.apply_noise(images)
