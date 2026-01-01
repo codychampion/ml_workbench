@@ -23,8 +23,10 @@ from tqdm import tqdm
 import torch
 
 # Support both direct execution and module execution (-m)
-sys.path.insert(0, str(Path(__file__).parent))
-from models import get_model_config, list_models, MODELS
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Import from local annotate module
+from pipelines.annotate.models import get_model_config, list_models, MODELS
 from utils.manifest import record_annotation_manifest, find_parent_collection_id
 
 

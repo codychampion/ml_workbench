@@ -43,13 +43,45 @@ docker compose --profile pipeline run --rm train python -m pipelines.train.train
 
 ```
 1. Plan          → knowledge/experiments/plans/
-2. Collect       → docker compose --profile pipeline run --rm collect ...
-3. Annotate      → docker compose --profile pipeline run --rm annotate ...
-4. Train         → docker compose --profile pipeline run --rm train ...
-5. Evaluate      → docker compose --profile pipeline run --rm evaluate ...
-6. Infer         → docker compose --profile pipeline run --rm infer ...
+2. Collect       → python -m pipelines.collect.collect_{reddit,hf,cuad}
+3. Annotate      → python -m pipelines.annotate.caption
+4. Train         → python -m pipelines.train.train_lora
+5. Evaluate      → python -m pipelines.evaluate.benchmark
+6. Infer         → python -m pipelines.infer.run_generation
 7. Ingest run    → python scripts/ingest_aim_run.py
 8. Register model→ python scripts/register_model_image.py <model_id>
+```
+
+## Examples
+
+### Reddit Image Collection
+```bash
+# Collect 100 images from r/earthporn
+python -m pipelines.collect.collect_reddit --subreddit earthporn --limit 100 --sort top --time week
+
+# Multiple subreddits
+python -m pipelines.collect.collect_reddit --subreddit "earthporn,cityporn" --limit 50
+```
+
+### HuggingFace Dataset Collection
+```bash
+# Download 50 samples from LAION
+python -m pipelines.collect.collect_hf --dataset laion/laion400m --split train --limit 50
+
+# With Hydra config
+python -m pipelines.collect.collect_hf --hydra pipeline=collect_hf
+```
+
+### CUAD Contract Dataset
+```bash
+# Download 1000 contract samples
+python -m pipelines.collect.collect_cuad --split train --limit 1000
+
+# Full dataset (84,325 samples)
+python -m pipelines.collect.collect_cuad --split train --limit -1
+
+# With Hydra config for MAKER experiment
+python -m pipelines.collect.collect_cuad --hydra pipeline=collect_cuad
 ```
 
 ## Knowledge Vault
@@ -80,13 +112,21 @@ python scripts/labelstudio_sync.py export --dataset my-ds  # Export to LS
 ## Pipeline Stages
 
 ```bash
-# Collect
+# Collect - Reddit
 docker compose --profile pipeline run --rm collect \
-  python -m pipelines.collect.collect --subreddit earthporn
+  python -m pipelines.collect.collect_reddit --subreddit earthporn --limit 100
 
-# Annotate
+# Collect - HuggingFace
+docker compose --profile pipeline run --rm collect \
+  python -m pipelines.collect.collect_hf --dataset laion/laion400m --limit 50
+
+# Collect - CUAD (Legal Contracts)
+docker compose --profile pipeline run --rm collect \
+  python -m pipelines.collect.collect_cuad --split train --limit 100
+
+# Annotate - Caption images
 docker compose --profile pipeline run --rm annotate \
-  python -m pipelines.annotate.auto_caption --input ./data/collected
+  python -m pipelines.annotate.caption --input ./data/collected --model blip-base
 
 # Train
 docker compose --profile pipeline run --rm train \

@@ -16,12 +16,12 @@ Usage:
 
 import os
 import sys
-import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, Any, Union, List
+from typing import Optional, Dict, Any
 
 from omegaconf import DictConfig, OmegaConf
+from utils.git_utils import get_git_info
 
 # AIM integration
 try:
@@ -34,7 +34,17 @@ except ImportError:
 
 
 def flatten_dict(d: Dict, parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
-    """Flatten a nested dictionary."""
+    """
+    Flatten a nested dictionary for easier filtering in AIM UI.
+
+    Args:
+        d: Dictionary to flatten
+        parent_key: Prefix for keys (used in recursion)
+        sep: Separator between nested keys
+
+    Returns:
+        Flattened dictionary with dot-separated keys
+    """
     items = []
     for k, v in d.items():
         new_key = f"{parent_key}{sep}{k}" if parent_key else k
@@ -43,72 +53,6 @@ def flatten_dict(d: Dict, parent_key: str = '', sep: str = '.') -> Dict[str, Any
         else:
             items.append((new_key, v))
     return dict(items)
-
-
-def get_git_info() -> Dict[str, Any]:
-    """
-    Get current git state for experiment traceability.
-
-    Returns dict with commit hash, branch, message, author, and modified files.
-    This is recorded at experiment start time to ensure reproducibility.
-    """
-    def run_git(args: List[str]) -> str:
-        try:
-            result = subprocess.run(
-                ["git"] + args,
-                capture_output=True,
-                text=True,
-                timeout=10,
-                cwd=os.getcwd()
-            )
-            return result.stdout.strip() if result.returncode == 0 else ""
-        except Exception:
-            return ""
-
-    commit = run_git(["rev-parse", "HEAD"])
-    commit_short = run_git(["rev-parse", "--short", "HEAD"])
-    branch = run_git(["rev-parse", "--abbrev-ref", "HEAD"])
-    commit_message = run_git(["log", "-1", "--format=%s"])
-    commit_author = run_git(["log", "-1", "--format=%an <%ae>"])
-    commit_date = run_git(["log", "-1", "--format=%ci"])
-
-    # Check if working directory has uncommitted changes
-    dirty = bool(run_git(["status", "--porcelain"]))
-
-    # Get list of files changed in the current commit
-    modified_files = run_git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
-    modified_list = modified_files.split("\n") if modified_files else []
-
-    # Get uncommitted changes if dirty
-    uncommitted = []
-    if dirty:
-        uncommitted_output = run_git(["status", "--porcelain"])
-        uncommitted = [line[3:] for line in uncommitted_output.split("\n") if line]
-
-    # Try to get remote URL for building commit links
-    remote_url = run_git(["remote", "get-url", "origin"])
-    repo_url = ""
-    if remote_url:
-        # Convert git@github.com:user/repo.git to https://github.com/user/repo
-        if remote_url.startswith("git@"):
-            repo_url = remote_url.replace("git@", "https://").replace(":", "/").rstrip(".git")
-        elif remote_url.startswith("https://"):
-            repo_url = remote_url.rstrip(".git")
-
-    return {
-        "commit": commit,
-        "commit_short": commit_short,
-        "branch": branch,
-        "commit_message": commit_message,
-        "commit_author": commit_author,
-        "commit_date": commit_date,
-        "dirty": dirty,
-        "uncommitted_files": uncommitted,
-        "modified_files": modified_list,
-        "repo_url": repo_url,
-        "commit_url": f"{repo_url}/commit/{commit}" if repo_url and commit else "",
-        "diff_from_main": f"{repo_url}/compare/main...{commit}" if repo_url and commit else "",
-    }
 
 
 def init_aim_from_hydra(
@@ -203,11 +147,15 @@ def init_aim_from_hydra(
 
 def log_hydra_config(run: Run, cfg: DictConfig) -> None:
     """
-    Log Hydra configuration to AIM run.
+    Log Hydra configuration to AIM run for experiment tracking.
+
+    Logs both nested and flattened versions:
+    - Nested: Full config structure under run["hparams"]
+    - Flattened: Dot-separated keys for easy filtering in AIM UI
 
     Args:
         run: AIM Run object
-        cfg: Hydra DictConfig object
+        cfg: Hydra DictConfig object with experiment configuration
     """
     if run is None:
         return
@@ -332,11 +280,13 @@ def get_hydra_config_from_run(run: Run) -> Optional[Dict]:
     """
     Retrieve Hydra configuration from an existing AIM run.
 
+    Useful for reproducing experiments or comparing configurations.
+
     Args:
-        run: AIM Run object
+        run: AIM Run object to retrieve config from
 
     Returns:
-        Configuration dictionary or None
+        Configuration dictionary if available, None otherwise
     """
     if run is None:
         return None
