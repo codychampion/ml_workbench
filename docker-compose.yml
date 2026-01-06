@@ -2,6 +2,7 @@
 #
 # Default (MinIO only): docker compose up -d
 # Profiles:
+#   llm:      docker compose --profile llm up -d
 #   chat:     docker compose --profile chat up -d
 #   cv_ui:    docker compose --profile cv_ui up -d
 #   labeling: docker compose --profile labeling up -d
@@ -36,6 +37,88 @@ services:
     entrypoint: /bin/sh -c "mc alias set m http://minio:9000 $${S3_ACCESS_KEY:-mlops-admin} $${S3_SECRET_KEY:-mlops-dev-password} && mc mb --ignore-existing m/mlops-data m/mlops-models m/mlops-outputs"
     networks: [mlops-network]
     restart: "no"
+
+  # === LLM PROFILE ===
+  llm:
+    image: vllm/vllm-openai:latest
+    profiles: [llm]
+    restart: unless-stopped
+    ports: ["8000:8000"]
+    volumes:
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/root/.cache/huggingface
+      - ./models:/models
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      HF_HOME: /root/.cache/huggingface
+      VLLM_API_KEY: ${VLLM_API_KEY:-ml-workbench-key}
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    command: >
+      --model ${LLM_MODEL:-meta-llama/Llama-3.1-70B-Instruct}
+      --tensor-parallel-size 1
+      --max-model-len ${MAX_CONTEXT:-8192}
+      --gpu-memory-utilization ${GPU_MEM_UTIL:-0.9}
+      --dtype auto
+      --api-key ${VLLM_API_KEY:-ml-workbench-key}
+      --served-model-name llm
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks: [mlops-network]
+
+  llm-fast:
+    image: vllm/vllm-openai:latest
+    profiles: [llm-multi]
+    restart: unless-stopped
+    ports: ["8001:8000"]
+    volumes:
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/root/.cache/huggingface
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      HF_HOME: /root/.cache/huggingface
+      VLLM_API_KEY: ${VLLM_API_KEY:-ml-workbench-key}
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    command: >
+      --model Qwen/Qwen2.5-32B-Instruct
+      --max-model-len 32768
+      --gpu-memory-utilization 0.4
+      --dtype auto
+      --api-key ${VLLM_API_KEY:-ml-workbench-key}
+      --served-model-name llm-fast
+    networks: [mlops-network]
+
+  llm-vision:
+    image: vllm/vllm-openai:latest
+    profiles: [llm-vision]
+    restart: unless-stopped
+    ports: ["8002:8000"]
+    volumes:
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/root/.cache/huggingface
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+      HF_HOME: /root/.cache/huggingface
+      VLLM_API_KEY: ${VLLM_API_KEY:-ml-workbench-key}
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    command: >
+      --model Qwen/Qwen2-VL-7B-Instruct
+      --max-model-len 4096
+      --gpu-memory-utilization 0.25
+      --dtype auto
+      --api-key ${VLLM_API_KEY:-ml-workbench-key}
+      --served-model-name llm-vision
+    networks: [mlops-network]
+
 
   # === CHAT PROFILE ===
   postgres:
