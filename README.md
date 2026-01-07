@@ -11,9 +11,6 @@ docker compose up -d
 # Start local LLM server (Llama 3.1 70B on 5090)
 docker compose --profile llm up -d
 
-# Start Jupyter Lab with GPU
-docker compose --profile jupyter up -d
-
 # Add Khoj chat interface
 docker compose --profile chat up -d
 
@@ -29,16 +26,11 @@ See [README_LLM.md](README_LLM.md) for detailed LLM server configuration.
 |---------|---------|----------|
 | (default) | `docker compose up -d` | MinIO (S3 storage) |
 | llm | `--profile llm` | vLLM server (70B) |
-| jupyter | `--profile jupyter` | JupyterLab + GPU |
-| api | `--profile api` | FastAPI server |
-| redteam | `--profile redteam` | Red team daemon |
 | chat | `--profile chat` | Khoj + Postgres |
-| cv_ui | `--profile cv_ui` | FiftyOne + MongoDB |
 | labeling | `--profile labeling` | Label Studio |
 | tracking | `--profile tracking` | AIM |
 | registry | `--profile registry` | Docker Registry |
 | pipeline | `--profile pipeline run --rm <stage>` | Pipeline containers |
-| dev | `--profile dev` | Dev shell + Jupyter |
 | test | `--profile test run --rm test` | Tests |
 
 ## Web UIs
@@ -47,10 +39,7 @@ See [README_LLM.md](README_LLM.md) for detailed LLM server configuration.
 |---------|-----|---------|
 | MinIO Console | http://localhost:9001 | (default) |
 | LLM API | http://localhost:8000 | llm |
-| Jupyter Lab | http://localhost:8888 | jupyter, dev |
-| API Server | http://localhost:8080 | api |
 | Khoj | http://localhost:42110 | chat |
-| FiftyOne | http://localhost:5151 | cv_ui |
 | Label Studio | http://localhost:8081 | labeling |
 | AIM | http://localhost:43800 | tracking |
 
@@ -59,12 +48,9 @@ See [README_LLM.md](README_LLM.md) for detailed LLM server configuration.
 ```
 1. Plan          → knowledge/experiments/plans/
 2. Collect       → python -m pipelines.collect.collect_{reddit,hf}
-3. Annotate      → python -m pipelines.annotate.caption
-4. Train         → python -m pipelines.train.train_lora
-5. Evaluate      → python -m pipelines.evaluate.benchmark
-6. Infer         → python -m pipelines.infer.run_generation
-7. Ingest run    → python scripts/ingest_aim_run.py
-8. Register model→ python scripts/register_model_image.py <model_id>
+3. Train         → python -m pipelines.train.train_lora
+4. Evaluate      → python -m pipelines.evaluate.benchmark
+5. Infer         → python -m pipelines.infer.run_generation
 ```
 
 ## Examples
@@ -107,9 +93,6 @@ Copy `.env.example` to `.env`. Key vars:
 
 ```bash
 python scripts/new_experiment.py "My experiment"    # Create plan
-python scripts/ingest_aim_run.py --run <hash>       # Ingest AIM run
-python scripts/register_model_image.py <model_id>   # Register model
-python scripts/labelstudio_sync.py export --dataset my-ds  # Export to LS
 ```
 
 ## Pipeline Stages
@@ -122,10 +105,6 @@ docker compose --profile pipeline run --rm collect \
 # Collect - HuggingFace
 docker compose --profile pipeline run --rm collect \
   python -m pipelines.collect.collect_hf --dataset laion/laion400m --limit 50
-
-# Annotate - Caption images
-docker compose --profile pipeline run --rm annotate \
-  python -m pipelines.annotate.caption --input ./data/collected --model blip-base
 
 # Train
 docker compose --profile pipeline run --rm train \

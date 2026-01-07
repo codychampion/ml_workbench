@@ -4,15 +4,10 @@
 # Profiles:
 #   llm:      docker compose --profile llm up -d
 #   chat:     docker compose --profile chat up -d
-#   cv_ui:    docker compose --profile cv_ui up -d
 #   labeling: docker compose --profile labeling up -d
 #   tracking: docker compose --profile tracking up -d
 #   registry: docker compose --profile registry up -d
-#   jupyter:  docker compose --profile jupyter up -d
-#   api:      docker compose --profile api up -d
-#   redteam:  docker compose --profile redteam up -d
 #   pipeline: docker compose --profile pipeline run --rm train <cmd>
-#   dev:      docker compose --profile dev up -d
 #   test:     docker compose --profile test run --rm test
 
 services:
@@ -173,43 +168,6 @@ services:
       GITHUB_TOKEN: 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
     networks: [mlops-network]
 
-  watcher:
-    build: {context: ., dockerfile: services/watcher/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    environment:
-      KNOWLEDGE_DIR: /workspace/knowledge
-      WATCH_INTERVAL_SECONDS: 300
-      AIM_REPO: /workspace/outputs/aim
-    volumes:
-      - .:/workspace:cached
-      - ./outputs:/workspace/outputs
-      - ./knowledge:/workspace/knowledge
-    networks: [mlops-network]
-
-  # === CV_UI PROFILE ===
-  mongodb:
-    image: mongo:7.0
-    profiles: [cv_ui]
-    restart: unless-stopped
-    volumes: [mongodb-data:/data/db]
-    healthcheck: {test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"], interval: 30s, timeout: 10s, retries: 3}
-    networks: [mlops-network]
-
-  fiftyone:
-    build: {context: ., dockerfile: services/fiftyone/Dockerfile}
-    profiles: [cv_ui]
-    restart: unless-stopped
-    depends_on: {mongodb: {condition: service_healthy}, minio: {condition: service_healthy}}
-    ports: ["5151:5151"]
-    volumes: [fiftyone-data:/workspace/fiftyone/datasets, ./data:/workspace/data:ro]
-    environment:
-      FIFTYONE_DATABASE_URI: mongodb://mongodb:27017/fiftyone
-      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-mlops-admin}
-      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-mlops-dev-password}
-      AWS_S3_ENDPOINT_URL: http://minio:9000
-    networks: [mlops-network]
-
   # === LABELING PROFILE ===
   label-studio:
     image: heartexlabs/label-studio:1.11.0
@@ -264,14 +222,6 @@ services:
       AIM_REPO: /workspace/outputs/aim
     networks: [mlops-network]
 
-  annotate:
-    build: {context: ., dockerfile: pipelines/annotate/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, huggingface-cache:/workspace/.cache/huggingface]
-    environment: *pipeline_env
-    networks: [mlops-network]
-
   train:
     build: {context: ., dockerfile: pipelines/train/Dockerfile}
     profiles: [pipeline]
@@ -302,82 +252,6 @@ services:
       S3_BUCKET: mlops-outputs
     networks: [mlops-network]
 
-  # === JUPYTER PROFILE ===
-  jupyter:
-    build: {context: ., dockerfile: Dockerfile.jupyter}
-    profiles: [jupyter, dev]
-    restart: unless-stopped
-    depends_on: {minio: {condition: service_healthy}}
-    ports: ["8888:8888"]
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - ./outputs:/workspace/outputs
-      - huggingface-cache:/workspace/.cache/huggingface
-    environment:
-      <<: *pipeline_env
-      JUPYTER_ENABLE_LAB: "yes"
-      JUPYTER_TOKEN: ${JUPYTER_TOKEN:-mlops-dev-token}
-    deploy:
-      resources:
-        reservations:
-          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
-    networks: [mlops-network]
-
-  # === API PROFILE ===
-  api:
-    build: {context: ., dockerfile: Dockerfile.api}
-    profiles: [api]
-    restart: unless-stopped
-    depends_on: {minio: {condition: service_healthy}}
-    ports: ["8080:8080"]
-    volumes:
-      - .:/workspace:cached
-      - ./models:/workspace/models
-      - huggingface-cache:/workspace/.cache/huggingface
-    environment:
-      <<: *pipeline_env
-      API_PORT: 8080
-      API_HOST: 0.0.0.0
-    deploy:
-      resources:
-        reservations:
-          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
-    networks: [mlops-network]
-
-  # === REDTEAM PROFILE ===
-  redteam:
-    build: {context: ., dockerfile: Dockerfile.redteam}
-    profiles: [redteam]
-    restart: unless-stopped
-    depends_on:
-      minio: {condition: service_healthy}
-      llm: {condition: service_healthy}
-    volumes:
-      - .:/workspace:cached
-      - ./data:/workspace/data
-      - ./models:/workspace/models
-      - ./outputs:/workspace/outputs
-      - huggingface-cache:/workspace/.cache/huggingface
-    environment:
-      <<: *pipeline_env
-      OPENAI_API_BASE: http://llm:8000/v1
-      OPENAI_API_KEY: ${VLLM_API_KEY:-ml-workbench-key}
-      REDTEAM_REDIS_HOST: ${REDTEAM_REDIS_HOST:-redis}
-    networks: [mlops-network]
-
-  # === DEV PROFILE ===
-  dev:
-    build: {context: ., dockerfile: docker/base/Dockerfile.diffusers}
-    profiles: [dev]
-    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, huggingface-cache:/workspace/.cache/huggingface]
-    environment: *pipeline_env
-    ports: ["8888:8888"]
-    stdin_open: true
-    tty: true
-    networks: [mlops-network]
-
   # === TEST PROFILE ===
   test:
     build: {context: ., dockerfile: tests/docker/Dockerfile}
@@ -391,11 +265,9 @@ services:
 
 volumes:
   minio-data:
-  mongodb-data:
   postgres-data:
   aim-data:
   label-studio-data:
-  fiftyone-data:
   huggingface-cache:
   khoj-data:
   registry-data:
