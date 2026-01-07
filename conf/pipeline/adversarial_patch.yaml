@@ -1,0 +1,100 @@
+# =============================================================================
+# Pipeline Configuration - Adversarial Patch Generation
+# =============================================================================
+
+adversarial_patch:
+  # Target model to attack
+  target_model:
+    type: "yolov8"  # yolov8, clip-classifier
+    model_path: "yolov8n.pt"  # For YOLO
+    attack_objective: "evasion"  # evasion, misclassification
+
+  # Style constraints
+  style:
+    method: "clip"  # Currently only CLIP supported
+    prompt: "punk rock band patch, DIY aesthetic, black and white, screen printed"
+    clip_model: "ViT-B/32"
+
+  # Patch configuration
+  patch:
+    size: [300, 300]  # [height, width]
+    init_method: "random"  # random, gray, white
+
+  # Optimization settings
+  optimization:
+    iterations: 500
+    learning_rate: 0.01
+    lambda_adv: 0.5  # Weight for adversarial loss
+    lambda_style: 0.4  # Weight for style loss
+    adversarial_prominence: 2.0  # Visibility of adversarial noise (0.5=subtle, 1.0=balanced, 2.0=prominent)
+
+    # EoT (Expectation over Transformation) for physical robustness
+    use_eot: true
+    eot_samples: 10
+
+  # Physical robustness transformations
+  robustness:
+    brightness_range: [0.8, 1.2]
+    contrast_range: [0.8, 1.2]
+    rotation_range: [-15, 15]  # degrees
+    scale_range: [0.8, 1.2]
+    noise_std: 0.01
+
+  # Test images for optimization
+  test_images: "${paths.data.test}/coco_persons"
+  num_test_images: 10
+
+  # Output configuration
+  output:
+    dir: "${paths.outputs}/adv_patches"
+    path: "${paths.outputs}/adv_patches/punk_patch_v1.png"
+    save_metadata: true
+
+# Example configurations for different experiments
+adversarial_patch_punk:
+  <<: *adversarial_patch
+  style:
+    prompt: "punk rock band patch, DIY aesthetic, black and white, distressed"
+  optimization:
+    lambda_style: 0.6  # Higher weight for punk aesthetic
+  output:
+    path: "${paths.outputs}/adv_patches/punk_evasion.png"
+
+adversarial_patch_minimal_style:
+  <<: *adversarial_patch
+  optimization:
+    lambda_adv: 0.8  # Prioritize attack effectiveness
+    lambda_style: 0.2  # Minimal style constraint
+  output:
+    path: "${paths.outputs}/adv_patches/minimal_style.png"
+
+adversarial_patch_high_robustness:
+  <<: *adversarial_patch
+  optimization:
+    use_eot: true
+    eot_samples: 20  # More transformation samples
+    iterations: 800  # More iterations
+  output:
+    path: "${paths.outputs}/adv_patches/robust_patch.png"
+
+adversarial_patch_glitchy:
+  <<: *adversarial_patch
+  style:
+    prompt: "glitch art punk patch, digital corruption, distorted, cyberpunk"
+  optimization:
+    lambda_adv: 0.7  # Prioritize attack effectiveness
+    lambda_style: 0.3  # Less style constraint
+    adversarial_prominence: 3.0  # Maximum adversarial noise visibility
+    iterations: 600
+  output:
+    path: "${paths.outputs}/adv_patches/glitchy_punk.png"
+
+adversarial_patch_subtle:
+  <<: *adversarial_patch
+  optimization:
+    lambda_adv: 0.4
+    lambda_style: 0.6  # More style constraint
+    adversarial_prominence: 0.5  # Hide adversarial noise
+    iterations: 800
+  output:
+    path: "${paths.outputs}/adv_patches/subtle_patch.png"

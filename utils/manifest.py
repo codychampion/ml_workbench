@@ -8,48 +8,21 @@ knowledge base and Khoj search.
 
 import json
 import os
-import subprocess
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-
-def _run_git(args: list[str]) -> str:
-    try:
-        result = subprocess.run(
-            ["git"] + args,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout.strip() if result.returncode == 0 else ""
-    except Exception:
-        return ""
-
-
-def get_git_info() -> Dict[str, Any]:
-    commit = _run_git(["rev-parse", "HEAD"])
-    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"])
-    commit_message = _run_git(["log", "-1", "--format=%s"])
-    commit_author = _run_git(["log", "-1", "--format=%an <%ae>"])
-    commit_short = _run_git(["rev-parse", "--short", "HEAD"])
-    dirty = bool(_run_git(["status", "--porcelain"]))
-    return {
-        "commit": commit,
-        "commit_short": commit_short,
-        "branch": branch,
-        "message": commit_message,
-        "author": commit_author,
-        "dirty": dirty,
-    }
+from utils.git_utils import get_git_info
 
 
 def _default_manifest_dir() -> Path:
+    """Get manifest directory from env MANIFEST_DIR or default path."""
     return Path(os.environ.get("MANIFEST_DIR", "./knowledge/datasets/manifests"))
 
 
 def _slugify(text: str) -> str:
+    """Convert text to slug: lowercase alphanumeric with hyphens/underscores."""
     return "".join(c if c.isalnum() or c in "-_" else "-" for c in text.lower()).strip("-")
 
 
@@ -82,6 +55,7 @@ class AnnotationManifest:
 
 
 def write_manifest(manifest: Dict[str, Any], manifest_dir: Optional[Path] = None, sidecar: Optional[Path] = None) -> Path:
+    """Write manifest to knowledge base with optional sidecar copy in data dir."""
     manifest_dir = manifest_dir or _default_manifest_dir()
     manifest_dir.mkdir(parents=True, exist_ok=True)
     target = manifest_dir / f"{manifest['id']}.json"
@@ -99,6 +73,7 @@ def record_collection_manifest(
     counts: Dict[str, Any],
     cfg: Optional[Any] = None,
 ) -> Path:
+    """Create collection manifest tracking source, counts, git state, and config."""
     ts = datetime.now()
     manifest_id = f"col-{ts.strftime('%Y%m%d-%H%M%S')}-{_slugify(name) or 'collection'}"
     config_snapshot = None
@@ -124,7 +99,7 @@ def record_collection_manifest(
 
 
 def find_parent_collection_id(path: Path) -> Optional[str]:
-    """Walk up directories looking for a collection_manifest.json."""
+    """Walk up dirs to find collection_manifest.json and return its ID."""
     for candidate in [path] + list(path.parents):
         manifest_path = candidate / "collection_manifest.json"
         if manifest_path.exists():
@@ -145,6 +120,7 @@ def record_annotation_manifest(
     parent_collection_id: Optional[str] = None,
     cfg: Optional[Any] = None,
 ) -> Path:
+    """Create annotation manifest tracking transformations and linking to source collection."""
     ts = datetime.now()
     manifest_id = f"ann-{ts.strftime('%Y%m%d-%H%M%S')}-{_slugify(name) or 'annotation'}"
     config_snapshot = None

@@ -1,0 +1,24 @@
+# =============================================================================
+# Pipeline Configuration - CUAD Dataset Collection
+# =============================================================================
+
+collect_cuad:
+  source:
+    dataset: "theatticusproject/cuad"
+    split: train
+    limit: 1000  # -1 for full dataset (84,325 samples)
+
+  filter:
+    text_column: text
+    id_column: null
+    max_text_length: 8000
+
+  output:
+    dir: ${paths.data.collected}/cuad
+    save_metadata: true
+
+  # MAKER experiment settings
+  maker:
+    enabled: false  # Enable to prepare for MAKER experiments
+    voting_threshold: 3  # k value for first-to-ahead-by-k
+    granularity: clause_level  # contract_level | clause_level | sentence_level

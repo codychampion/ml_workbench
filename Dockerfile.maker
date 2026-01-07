@@ -1,0 +1,296 @@
+# =========================================================================
+# MAKER Experiment - Portable Docker Image
+# =========================================================================
+# Self-contained environment for CUAD dataset collection and MAKER-based
+# contract review experiments. Can be exported and run on any system.
+#
+# Build: docker build -f Dockerfile.maker -t maker-experiment:latest .
+# Run:   docker run --rm -v ./outputs:/workspace/outputs maker-experiment:latest
+#
+# For GPU support (optional):
+#   docker run --gpus all --rm -v ./outputs:/workspace/outputs maker-experiment:latest
+
+FROM python:3.10-slim
+
+LABEL maintainer="ML Workbench"
+LABEL description="Portable MAKER experiment for contract review"
+LABEL version="1.0"
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace
+
+# Create directory structure (MAKER/CUAD only)
+RUN mkdir -p \
+    /workspace/pipelines/collect \
+    /workspace/utils \
+    /workspace/conf/pipeline \
+    /workspace/knowledge/experiments/plans \
+    /workspace/knowledge/papers/notes \
+    /workspace/knowledge/datasets/cards \
+    /workspace/knowledge/datasets/manifests \
+    /workspace/data/collected/cuad \
+    /workspace/outputs
+
+# Install Python dependencies
+RUN pip install --no-cache-dir \
+    datasets==2.18.0 \
+    transformers==4.38.0 \
+    torch==2.1.2 \
+    hydra-core==1.3.2 \
+    omegaconf==2.3.0 \
+    aim==3.17.5 \
+    openai==1.12.0 \
+    numpy==1.26.4 \
+    pandas==2.2.1 \
+    tqdm==4.66.2 \
+    requests==2.31.0
+
+# Copy ONLY MAKER/CUAD experiment files
+# ========================================
+
+# CUAD collection pipeline ONLY
+COPY pipelines/__init__.py /workspace/pipelines/
+COPY pipelines/collect/__init__.py /workspace/pipelines/collect/
+COPY pipelines/collect/collect_cuad.py /workspace/pipelines/collect/
+
+# Required utilities (dependencies of collect_cuad.py)
+COPY utils/__init__.py /workspace/utils/
+COPY utils/decorators.py /workspace/utils/
+COPY utils/hydra_aim.py /workspace/utils/
+COPY utils/manifest.py /workspace/utils/
+COPY utils/git_utils.py /workspace/utils/
+
+# CUAD-specific configuration
+COPY conf/pipeline/collect_cuad.yaml /workspace/conf/pipeline/
+
+# Create minimal Hydra config (CUAD-specific only)
+RUN cat > /workspace/conf/config.yaml << 'EOFCONFIG'
+# Minimal config for MAKER/CUAD experiment ONLY
+defaults:
+  - pipeline: collect_cuad
+
+paths:
+  data:
+    collected: ./data/collected
+  outputs: ./outputs
+
+aim:
+  repo: ./outputs/aim
+  experiment: maker-cuad
+  log_system_params: true
+
+compute:
+  device: cuda
+EOFCONFIG
+
+# MAKER/CUAD documentation ONLY
+COPY knowledge/experiments/plans/cuad_maker_plan.md /workspace/knowledge/experiments/plans/
+COPY knowledge/papers/notes/maker_paper.md /workspace/knowledge/papers/notes/
+COPY knowledge/datasets/cards/cuad_dataset_card.md /workspace/knowledge/datasets/cards/
+
+# Create a startup script
+RUN cat > /workspace/run_maker.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "========================================="
+echo "MAKER Experiment - Contract Review"
+echo "========================================="
+echo ""
+echo "Available commands:"
+echo ""
+echo "1. Download CUAD dataset (1000 samples):"
+echo "   python -m pipelines.collect.collect_cuad --limit 1000"
+echo ""
+echo "2. Download full CUAD dataset (84,325 samples):"
+echo "   python -m pipelines.collect.collect_cuad --limit -1"
+echo ""
+echo "3. Prepare MAKER experiment:"
+echo "   python -m pipelines.collect.collect_cuad --limit 1000 --prepare-maker"
+echo ""
+echo "4. View experiment plan:"
+echo "   cat knowledge/experiments/plans/cuad_maker_plan.md"
+echo ""
+echo "5. View MAKER paper notes:"
+echo "   cat knowledge/papers/notes/maker_paper.md"
+echo ""
+echo "========================================="
+
+# If no arguments, show help
+if [ $# -eq 0 ]; then
+    echo ""
+    echo "Usage: docker run [OPTIONS] maker-experiment:latest [COMMAND]"
+    echo ""
+    echo "Examples:"
+    echo "  docker run --rm -v \$(pwd)/outputs:/workspace/outputs maker-experiment:latest python -m pipelines.collect.collect_cuad --limit 100"
+    echo "  docker run --rm -v \$(pwd)/outputs:/workspace/outputs maker-experiment:latest bash"
+    echo ""
+    exit 0
+fi
+
+# Execute command
+exec "$@"
+EOF
+
+RUN chmod +x /workspace/run_maker.sh
+
+# Create README for the container
+RUN cat > /workspace/README_CONTAINER.md << 'EOF'
+# MAKER Experiment Container
+
+This is a portable Docker container for running MAKER-based contract review experiments on the CUAD dataset.
+
+## What's Included
+
+- **CUAD Dataset Collector** - Download and prepare legal contracts
+- **MAKER Framework Documentation** - Complete experiment plan and paper notes
+- **Utilities** - Git tracking, manifest generation, Hydra config
+- **Dependencies** - All Python packages pre-installed
+
+## Quick Start
+
+### 1. Download CUAD Dataset
+
+```bash
+# Download 1000 samples for testing
+docker run --rm \
+  -v $(pwd)/outputs:/workspace/outputs \
+  maker-experiment:latest \
+  python -m pipelines.collect.collect_cuad --limit 1000
+
+# Download full dataset (84,325 samples)
+docker run --rm \
+  -v $(pwd)/outputs:/workspace/outputs \
+  maker-experiment:latest \
+  python -m pipelines.collect.collect_cuad --limit -1
+```
+
+### 2. Prepare MAKER Experiment
+
+```bash
+# Prepare data for MAKER decomposition
+docker run --rm \
+  -v $(pwd)/outputs:/workspace/outputs \
+  maker-experiment:latest \
+  python -m pipelines.collect.collect_cuad --limit 1000 --prepare-maker --voting-threshold 3
+```
+
+### 3. Interactive Session
+
+```bash
+# Launch bash shell in container
+docker run --rm -it \
+  -v $(pwd)/outputs:/workspace/outputs \
+  maker-experiment:latest \
+  bash
+
+# Inside container:
+python -m pipelines.collect.collect_cuad --limit 100
+cat knowledge/experiments/plans/cuad_maker_plan.md
+```
+
+## Documentation
+
+All documentation is included in the container:
+
+- **Experiment Plan:** `/workspace/knowledge/experiments/plans/cuad_maker_plan.md`
+- **MAKER Paper Notes:** `/workspace/knowledge/papers/notes/maker_paper.md`
+- **CUAD Dataset Card:** `/workspace/knowledge/datasets/cards/cuad_dataset_card.md`
+
+View with:
+```bash
+docker run --rm maker-experiment:latest cat knowledge/experiments/plans/cuad_maker_plan.md
+```
+
+## Output Structure
+
+Data is saved to `/workspace/outputs` (map to host with `-v`):
+
+```
+outputs/
+├── data/
+│   └── collected/
+│       └── cuad/
+│           ├── train/
+│           │   ├── cuad_contracts.jsonl
+│           │   └── metadata.json
+│           └── cuad_maker_experiment/
+│               ├── maker_tasks.jsonl
+│               └── maker_config.json
+└── aim/  # Experiment tracking (if using AIM)
+```
+
+## Environment Variables
+
+Optional configuration:
+
+- `MANIFEST_DIR` - Directory for dataset manifests (default: `./knowledge/datasets/manifests`)
+- `HF_TOKEN` - HuggingFace token for gated models
+- `OPENAI_API_KEY` - For MAKER evaluation experiments
+
+Example:
+```bash
+docker run --rm \
+  -e HF_TOKEN=your_token \
+  -e OPENAI_API_KEY=your_key \
+  -v $(pwd)/outputs:/workspace/outputs \
+  maker-experiment:latest \
+  python -m pipelines.collect.collect_cuad --limit 100
+```
+
+## Next Steps
+
+1. **Collect Data:** Run the collector to download CUAD contracts
+2. **Review Plan:** Read the MAKER experiment plan to understand the approach
+3. **Implement Evaluation:** Create `pipelines/evaluate/cuad_maker.py` following the plan
+4. **Run Experiments:** Execute MAKER voting experiments with different k values
+
+## Files Included
+
+**Code:**
+- `pipelines/collect/collect_cuad.py` - CUAD dataset downloader
+- `pipelines/evaluate/` - Evaluation utilities (extend for MAKER)
+- `utils/` - Helper utilities (git, manifests, Hydra, decorators)
+
+**Configuration:**
+- `conf/config.yaml` - Base Hydra config
+- `conf/pipeline/collect_cuad.yaml` - CUAD collection settings
+
+**Documentation:**
+- `knowledge/experiments/plans/cuad_maker_plan.md` - Full experiment design
+- `knowledge/papers/notes/maker_paper.md` - MAKER paper notes
+- `knowledge/datasets/cards/cuad_dataset_card.md` - Dataset documentation
+
+## Tips
+
+- **Persist Data:** Always mount `/workspace/outputs` to save results
+- **GPU Support:** Add `--gpus all` for GPU-accelerated models
+- **Development:** Mount entire workspace for live code editing:
+  ```bash
+  docker run --rm -it \
+    -v $(pwd):/workspace \
+    maker-experiment:latest bash
+  ```
+- **Debugging:** Check logs in `/workspace/outputs/` after runs
+
+## Support
+
+For issues or questions about the MAKER framework, see:
+- MAKER Paper: arXiv:2511.09030
+- CUAD Dataset: https://huggingface.co/datasets/theatticusproject/cuad
+EOF
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV MANIFEST_DIR=/workspace/knowledge/datasets/manifests
+
+# Default command
+ENTRYPOINT ["/workspace/run_maker.sh"]
+CMD []

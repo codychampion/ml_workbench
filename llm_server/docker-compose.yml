@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm_server
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ./models:/models
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_HOME=/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      --model meta-llama/Llama-3.1-70B-Instruct
+      --tensor-parallel-size 1
+      --max-model-len 8192
+      --gpu-memory-utilization 0.9
+      --dtype auto
+      --api-key your-secret-key-here
+    restart: unless-stopped
+
+  # Alternative: Smaller, faster model
+  vllm-fast:
+    image: vllm/vllm-openai:latest
+    container_name: vllm_fast
+    ports:
+      - "8001:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_HOME=/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      --model Qwen/Qwen2.5-32B-Instruct
+      --max-model-len 32768
+      --gpu-memory-utilization 0.45
+      --dtype auto
+      --api-key your-secret-key-here
+    restart: unless-stopped
+    profiles:
+      - multi-model
+
+  # Vision-Language Model
+  vllm-vision:
+    image: vllm/vllm-openai:latest
+    container_name: vllm_vision
+    ports:
+      - "8002:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_HOME=/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    command: >
+      --model Qwen/Qwen2-VL-7B-Instruct
+      --max-model-len 4096
+      --gpu-memory-utilization 0.3
+      --dtype auto
+      --api-key your-secret-key-here
+    restart: unless-stopped
+    profiles:
+      - vision
+
+  # Optional: Open WebUI (ChatGPT-like interface)
+  webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    volumes:
+      - ./webui_data:/app/backend/data
+    environment:
+      - OPENAI_API_BASE_URL=http://vllm:8000/v1
+      - OPENAI_API_KEY=your-secret-key-here
+    depends_on:
+      - vllm
+    restart: unless-stopped
+    profiles:
+      - ui
