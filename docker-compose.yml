@@ -243,6 +243,59 @@ services:
     volumes: [registry-data:/var/lib/registry]
     networks: [mlops-network]
 
+  # === PIPELINE PROFILE ===
+  collect:
+    build: {context: ., dockerfile: pipelines/collect/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data/raw:/workspace/data/raw, ./data/collected:/workspace/data/collected]
+    environment: &pipeline_env
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-mlops-admin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-mlops-dev-password}
+      S3_BUCKET: mlops-data
+      HF_HOME: /workspace/.cache/huggingface
+      AIM_REPO: /workspace/outputs/aim
+    networks: [mlops-network]
+
+  annotate:
+    build: {context: ., dockerfile: pipelines/annotate/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, huggingface-cache:/workspace/.cache/huggingface]
+    environment: *pipeline_env
+    networks: [mlops-network]
+
+  train:
+    build: {context: ., dockerfile: pipelines/train/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
+    environment:
+      <<: *pipeline_env
+      S3_BUCKET: mlops-models
+    networks: [mlops-network]
+
+  evaluate:
+    build: {context: ., dockerfile: pipelines/evaluate/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
+    environment:
+      <<: *pipeline_env
+      S3_BUCKET: mlops-outputs
+    networks: [mlops-network]
+
+  infer:
+    build: {context: ., dockerfile: pipelines/infer/Dockerfile}
+    profiles: [pipeline]
+    depends_on: {minio: {condition: service_healthy}}
+    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
+    environment:
+      <<: *pipeline_env
+      S3_BUCKET: mlops-outputs
+    networks: [mlops-network]
+
   # === JUPYTER PROFILE ===
   jupyter:
     build: {context: ., dockerfile: Dockerfile.jupyter}
@@ -306,59 +359,6 @@ services:
       OPENAI_API_BASE: http://llm:8000/v1
       OPENAI_API_KEY: ${VLLM_API_KEY:-ml-workbench-key}
       REDTEAM_REDIS_HOST: ${REDTEAM_REDIS_HOST:-redis}
-    networks: [mlops-network]
-
-  # === PIPELINE PROFILE ===
-  collect:
-    build: {context: ., dockerfile: pipelines/collect/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    volumes: [.:/workspace:cached, ./data/raw:/workspace/data/raw, ./data/collected:/workspace/data/collected]
-    environment: &pipeline_env
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-mlops-admin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-mlops-dev-password}
-      S3_BUCKET: mlops-data
-      HF_HOME: /workspace/.cache/huggingface
-      AIM_REPO: /workspace/outputs/aim
-    networks: [mlops-network]
-
-  annotate:
-    build: {context: ., dockerfile: pipelines/annotate/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, huggingface-cache:/workspace/.cache/huggingface]
-    environment: *pipeline_env
-    networks: [mlops-network]
-
-  train:
-    build: {context: ., dockerfile: pipelines/train/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
-    environment:
-      <<: *pipeline_env
-      S3_BUCKET: mlops-models
-    networks: [mlops-network]
-
-  evaluate:
-    build: {context: ., dockerfile: pipelines/evaluate/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
-    environment:
-      <<: *pipeline_env
-      S3_BUCKET: mlops-outputs
-    networks: [mlops-network]
-
-  infer:
-    build: {context: ., dockerfile: pipelines/infer/Dockerfile}
-    profiles: [pipeline]
-    depends_on: {minio: {condition: service_healthy}}
-    volumes: [.:/workspace:cached, ./data:/workspace/data, ./models:/workspace/models, ./outputs:/workspace/outputs, huggingface-cache:/workspace/.cache/huggingface]
-    environment:
-      <<: *pipeline_env
-      S3_BUCKET: mlops-outputs
     networks: [mlops-network]
 
   # === DEV PROFILE ===
