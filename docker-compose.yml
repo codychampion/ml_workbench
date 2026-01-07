@@ -349,7 +349,7 @@ services:
   # === REDTEAM PROFILE ===
   redteam:
     build: {context: ., dockerfile: Dockerfile.redteam}
-    profiles: [redteam, pipeline]
+    profiles: [redteam]
     restart: unless-stopped
     depends_on:
       minio: {condition: service_healthy}
