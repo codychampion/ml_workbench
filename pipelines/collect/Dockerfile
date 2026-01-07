@@ -39,7 +39,11 @@ RUN uv pip install --system --no-cache \
     # Prefect removed; keep other deps
     "dvc[s3]>=3.0.0" \
     Pillow requests tqdm \
-    python-dotenv pyyaml
+    python-dotenv pyyaml \
+    # For CUAD collection
+    datasets \
+    hydra-core \
+    omegaconf
 
 RUN mkdir -p /workspace/data/{raw,collected} \
     && chown -R mlops:mlops /workspace
@@ -47,6 +51,8 @@ RUN mkdir -p /workspace/data/{raw,collected} \
 COPY --chown=mlops:mlops config.py /workspace/
 COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
 COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
+COPY --chown=mlops:mlops utils/ /workspace/utils/
+COPY --chown=mlops:mlops conf/ /workspace/conf/
 
 USER mlops
 
