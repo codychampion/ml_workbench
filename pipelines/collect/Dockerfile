@@ -40,7 +40,8 @@ RUN uv pip install --system --no-cache \
     "dvc[s3]>=3.0.0" \
     Pillow requests tqdm \
     python-dotenv pyyaml \
-    # For CUAD collection
+    # For CUAD collection - need compatible pyarrow version
+    "pyarrow>=12.0.0" \
     datasets \
     hydra-core \
     omegaconf
