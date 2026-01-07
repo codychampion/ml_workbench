@@ -99,6 +99,13 @@ def download_cuad_task(
                 f"Check dataset name and split are valid on HuggingFace Hub"
             ) from e2
 
+    # Remove PDF columns - we only want text and annotations
+    # This avoids needing pdfplumber dependency
+    pdf_columns = [col for col in ds.column_names if 'pdf' in col.lower()]
+    if pdf_columns:
+        print(f"  Removing PDF columns: {pdf_columns}")
+        ds = ds.remove_columns(pdf_columns)
+
     # Create output directory
     target_dir = output_dir / split
     target_dir.mkdir(parents=True, exist_ok=True)
