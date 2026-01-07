@@ -8,6 +8,12 @@ Self-hosted ML pipeline workbench with profile-based services.
 # Start core (MinIO only)
 docker compose up -d
 
+# Start local LLM server (Llama 3.1 70B on 5090)
+docker compose --profile llm up -d
+
+# Start Jupyter Lab with GPU
+docker compose --profile jupyter up -d
+
 # Add Khoj chat interface
 docker compose --profile chat up -d
 
@@ -15,18 +21,24 @@ docker compose --profile chat up -d
 docker compose --profile pipeline run --rm train python -m pipelines.train.train_lora
 ```
 
+See [README_LLM.md](README_LLM.md) for detailed LLM server configuration.
+
 ## Profiles
 
 | Profile | Command | Services |
 |---------|---------|----------|
 | (default) | `docker compose up -d` | MinIO (S3 storage) |
+| llm | `--profile llm` | vLLM server (70B) |
+| jupyter | `--profile jupyter` | JupyterLab + GPU |
+| api | `--profile api` | FastAPI server |
+| redteam | `--profile redteam` | Red team daemon |
 | chat | `--profile chat` | Khoj + Postgres |
 | cv_ui | `--profile cv_ui` | FiftyOne + MongoDB |
 | labeling | `--profile labeling` | Label Studio |
 | tracking | `--profile tracking` | AIM |
 | registry | `--profile registry` | Docker Registry |
 | pipeline | `--profile pipeline run --rm <stage>` | Pipeline containers |
-| dev | `--profile dev` | Dev shell |
+| dev | `--profile dev` | Dev shell + Jupyter |
 | test | `--profile test run --rm test` | Tests |
 
 ## Web UIs
@@ -34,6 +46,9 @@ docker compose --profile pipeline run --rm train python -m pipelines.train.train
 | Service | URL | Profile |
 |---------|-----|---------|
 | MinIO Console | http://localhost:9001 | (default) |
+| LLM API | http://localhost:8000 | llm |
+| Jupyter Lab | http://localhost:8888 | jupyter, dev |
+| API Server | http://localhost:8080 | api |
 | Khoj | http://localhost:42110 | chat |
 | FiftyOne | http://localhost:5151 | cv_ui |
 | Label Studio | http://localhost:8081 | labeling |

@@ -71,7 +71,6 @@ docker compose --profile llm --profile llm-vision up -d
 docker compose --profile llm --profile jupyter up -d
 # LLM on port 8000
 # Jupyter Lab on port 8888
-# Or use: make jupyter
 ```
 
 **With API Server:**
@@ -79,7 +78,6 @@ docker compose --profile llm --profile jupyter up -d
 docker compose --profile llm --profile api up -d
 # LLM on port 8000
 # API on port 8080
-# Or use: make api
 ```
 
 **With Red Team:**
@@ -87,7 +85,6 @@ docker compose --profile llm --profile api up -d
 docker compose --profile llm --profile redteam up -d
 # LLM on port 8000
 # Red team daemon running
-# Or use: make redteam
 ```
 
 ## Configuration (.env)
@@ -255,9 +252,9 @@ llm:
 
 Start Jupyter with LLM access:
 ```bash
-make jupyter
+docker compose --profile jupyter up -d
 # Access: http://localhost:8888
-# Token: mlops-dev-token
+# Token: mlops-dev-token (set in .env as JUPYTER_TOKEN)
 ```
 
 Use LLM in notebooks:
@@ -280,7 +277,7 @@ print(response.choices[0].message.content)
 
 Start API server with LLM backend:
 ```bash
-make api
+docker compose --profile api up -d
 # Access: http://localhost:8080
 ```
 
@@ -290,18 +287,22 @@ The API service has GPU access and can use LLM at `http://llm:8000/v1`.
 
 Start red team daemon for automated adversarial testing:
 ```bash
-make redteam
-# Automatically starts LLM if needed
+# Start LLM first
+docker compose --profile llm up -d
+
+# Then start red team
+docker compose --profile redteam up -d
 ```
 
 The daemon connects to LLM via `OPENAI_API_BASE=http://llm:8000/v1`.
 
 ## Next Steps
 
-1. Start server: `docker compose --profile llm up -d` or `make llm`
-2. Test API: `curl http://localhost:8000/v1/models` or `make test`
+1. Start server: `docker compose --profile llm up -d`
+2. Test API: `curl http://localhost:8000/v1/models`
 3. Use in Python: See examples above
-4. Start Jupyter: `make jupyter`
-5. Start services: `make api` or `make redteam`
+4. Start Jupyter: `docker compose --profile jupyter up -d`
+5. Start API: `docker compose --profile api up -d`
+6. Start red team: `docker compose --profile redteam up -d`
 
-For monitoring: `make gpu` or `make status`
+For monitoring: `watch nvidia-smi` or `docker compose ps`
