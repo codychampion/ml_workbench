@@ -75,13 +75,29 @@ def download_cuad_task(
     print(f"Dataset: {dataset} | Split: {split} | Limit: {limit}")
 
     # Load dataset with error handling
+    # Try with verification disabled first (handles cache corruption)
     try:
-        ds = load_dataset(dataset, split=split, streaming=False)
+        ds = load_dataset(
+            dataset,
+            split=split,
+            streaming=False,
+            verification_mode="no_checks"
+        )
     except Exception as e:
-        raise ValueError(
-            f"Failed to load dataset '{dataset}' split '{split}': {e}\n"
-            f"Check dataset name and split are valid on HuggingFace Hub"
-        ) from e
+        # If that fails, try force redownload
+        try:
+            print(f"  Retrying with force_redownload...")
+            ds = load_dataset(
+                dataset,
+                split=split,
+                streaming=False,
+                download_mode="force_redownload"
+            )
+        except Exception as e2:
+            raise ValueError(
+                f"Failed to load dataset '{dataset}' split '{split}': {e}\n"
+                f"Check dataset name and split are valid on HuggingFace Hub"
+            ) from e2
 
     # Create output directory
     target_dir = output_dir / split
