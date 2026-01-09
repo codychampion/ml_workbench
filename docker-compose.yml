@@ -196,7 +196,7 @@ services:
     restart: unless-stopped
     ports: ["8188:8188"]
     volumes:
-      - comfyui-data:/workspace
+      - ./comfyui_workspace:/workspace
       - ./models:/workspace/ComfyUI/models/custom:rw
       - ./outputs:/workspace/ComfyUI/output/custom:rw
       - ./data:/workspace/ComfyUI/input/custom:ro
@@ -304,7 +304,6 @@ volumes:
   postgres-data:
   aim-data:
   label-studio-data:
-  comfyui-data:
   huggingface-cache:
   khoj-data:
   registry-data:
