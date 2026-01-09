@@ -199,6 +199,7 @@ services:
       - ./models:/app/models/custom:rw
       - ./outputs:/app/output:rw
       - ./data:/app/input/custom:ro
+      - ./workflows/comfyui:/app/user/default/workflows:rw
     deploy:
       resources:
         reservations:
