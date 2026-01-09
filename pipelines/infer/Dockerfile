@@ -43,7 +43,12 @@ RUN uv pip install --system --no-cache \
     hvac \
     Pillow numpy tqdm requests \
     python-dotenv pyyaml \
-    opencv-python-headless
+    opencv-python-headless \
+    ultralytics
+
+# Install CLIP for adversarial pipeline
+RUN uv pip install --system --no-cache \
+    git+https://github.com/openai/CLIP.git
 
 RUN mkdir -p /workspace/models /workspace/outputs /workspace/data \
     && chown -R mlops:mlops /workspace
