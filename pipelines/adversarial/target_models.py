@@ -59,9 +59,9 @@ class YOLOv8Wrapper(TargetModel):
 
     def forward(self, images: torch.Tensor) -> List[Dict]:
         """Run YOLO detection."""
-        # YOLOv8 expects images in [0, 255] range
-        images_uint8 = (images * 255).byte()
-        results = self.model(images_uint8, verbose=False)
+        # YOLOv8/ultralytics expects images in [0, 1] range as float32
+        # It will handle normalization internally
+        results = self.model(images, verbose=False)
         return results
 
     def compute_loss(self, images: torch.Tensor, attack_objective: str = "evasion") -> torch.Tensor:
