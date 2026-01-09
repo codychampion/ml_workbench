@@ -196,10 +196,11 @@ services:
     restart: unless-stopped
     ports: ["8188:8188"]
     volumes:
-      - ./models:/app/models/custom:rw
+      - ./models:/app/models:rw
       - ./outputs:/app/output:rw
       - ./data:/app/input/custom:ro
       - ./workflows:/app/workflows:rw
+      - comfyui-user:/app/user
     deploy:
       resources:
         reservations:
@@ -301,6 +302,7 @@ volumes:
   huggingface-cache:
   khoj-data:
   registry-data:
+  comfyui-user:
 
 networks:
   mlops-network:
