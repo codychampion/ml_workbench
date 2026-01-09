@@ -27,6 +27,7 @@ See [README_LLM.md](README_LLM.md) for detailed LLM server configuration.
 | (default) | `docker compose up -d` | MinIO (S3 storage) |
 | llm | `--profile llm` | vLLM server (70B) |
 | chat | `--profile chat` | Khoj + Postgres |
+| comfyui | `--profile comfyui` | ComfyUI (LoRA training) |
 | labeling | `--profile labeling` | Label Studio |
 | tracking | `--profile tracking` | AIM |
 | registry | `--profile registry` | Docker Registry |
@@ -40,6 +41,7 @@ See [README_LLM.md](README_LLM.md) for detailed LLM server configuration.
 | MinIO Console | http://localhost:9001 | (default) |
 | LLM API | http://localhost:8000 | llm |
 | Khoj | http://localhost:42110 | chat |
+| ComfyUI | http://localhost:8188 | comfyui |
 | Label Studio | http://localhost:8081 | labeling |
 | AIM | http://localhost:43800 | tracking |
 

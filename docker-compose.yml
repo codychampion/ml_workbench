@@ -4,6 +4,7 @@
 # Profiles:
 #   llm:      docker compose --profile llm up -d
 #   chat:     docker compose --profile chat up -d
+#   comfyui:  docker compose --profile comfyui up -d
 #   labeling: docker compose --profile labeling up -d
 #   tracking: docker compose --profile tracking up -d
 #   registry: docker compose --profile registry up -d
@@ -188,6 +189,26 @@ services:
       AWS_S3_ENDPOINT: http://minio:9000
     networks: [mlops-network]
 
+  # === COMFYUI PROFILE ===
+  comfyui:
+    image: ghcr.io/ai-dock/comfyui:latest
+    profiles: [comfyui]
+    restart: unless-stopped
+    ports: ["8188:8188"]
+    volumes:
+      - comfyui-data:/workspace
+      - ./models:/workspace/ComfyUI/models:rw
+      - ./outputs:/workspace/ComfyUI/output:rw
+      - ./data:/workspace/ComfyUI/input:ro
+    environment:
+      WEB_ENABLE_AUTH: "false"
+      WORKSPACE: /workspace
+    deploy:
+      resources:
+        reservations:
+          devices: [{driver: nvidia, count: 1, capabilities: [gpu]}]
+    networks: [mlops-network]
+
   # === TRACKING PROFILE ===
   aim:
     image: aimstack/aim:3.19.3
@@ -280,6 +301,7 @@ volumes:
   postgres-data:
   aim-data:
   label-studio-data:
+  comfyui-data:
   huggingface-cache:
   khoj-data:
   registry-data:
