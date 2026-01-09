@@ -191,21 +191,14 @@ services:
 
   # === COMFYUI PROFILE ===
   comfyui:
-    image: ghcr.io/ai-dock/comfyui:latest
+    build: {context: ., dockerfile: docker/comfyui/Dockerfile}
     profiles: [comfyui]
     restart: unless-stopped
     ports: ["8188:8188"]
     volumes:
-      - ./comfyui_workspace:/workspace
-      - ./models:/workspace/ComfyUI/models/custom:rw
-      - ./outputs:/workspace/ComfyUI/output/custom:rw
-      - ./data:/workspace/ComfyUI/input/custom:ro
-    environment:
-      WEB_ENABLE_AUTH: "false"
-      WORKSPACE: /workspace
-      PUID: "1000"
-      PGID: "1000"
-      CF_QUICK_TUNNELS: "false"
+      - ./models:/app/models/custom:rw
+      - ./outputs:/app/output:rw
+      - ./data:/app/input/custom:ro
     deploy:
       resources:
         reservations:
