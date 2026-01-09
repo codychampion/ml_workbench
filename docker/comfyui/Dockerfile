@@ -22,6 +22,12 @@ RUN pip3 install --no-cache-dir \
     torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
     pip3 install --no-cache-dir -r requirements.txt
 
+# Install ComfyUI-Manager for easy model downloading and custom node management
+RUN cd custom_nodes && \
+    git clone https://github.com/ltdrdata/ComfyUI-Manager.git && \
+    cd ComfyUI-Manager && \
+    pip3 install --no-cache-dir -r requirements.txt
+
 # Create directories for models, outputs, and inputs
 RUN mkdir -p models/checkpoints models/vae models/loras \
     output input/custom user
