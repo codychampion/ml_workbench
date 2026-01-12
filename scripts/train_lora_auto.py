@@ -32,11 +32,18 @@ def organize_training_data(source_dir: Path, concept_name: str, repeats: int = 1
     image_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
     copied = 0
 
-    for img_file in Path(source_dir).rglob('*'):
+    source_path = Path(source_dir)
+    if not source_path.exists():
+        raise FileNotFoundError(f"Source directory does not exist: {source_dir}")
+
+    for img_file in source_path.rglob('*'):
         if img_file.suffix.lower() in image_extensions:
             dest = kohya_folder / img_file.name
             shutil.copy2(img_file, dest)
             copied += 1
+
+    if copied == 0:
+        raise ValueError(f"No images found in {source_dir}. Supported formats: {image_extensions}")
 
     print(f"✓ Organized {copied} images into {kohya_folder}")
     return training_root
@@ -130,6 +137,16 @@ def run_training(config_path: Path):
     Args:
         config_path: Path to TOML config file
     """
+    # Convert to relative path if it's absolute, otherwise use as-is
+    try:
+        rel_path = config_path.resolve().relative_to(Path.cwd().resolve())
+    except ValueError:
+        # If relative_to fails, assume it's already relative
+        rel_path = config_path
+
+    # Convert Windows backslashes to forward slashes for container path
+    container_path = str(rel_path).replace('\\', '/')
+
     cmd = f"""
 docker compose --profile kohya exec kohya \\
     /venv/bin/accelerate launch \\
@@ -137,7 +154,7 @@ docker compose --profile kohya exec kohya \\
     --mixed_precision fp16 \\
     --num_processes 1 \\
     /app/sd-scripts/train_network.py \\
-    --config_file /app/{config_path.relative_to(Path.cwd())}
+    --config_file /app/{container_path}
 """
 
     print(f"\n🚀 Starting training with command:\n{cmd}\n")
