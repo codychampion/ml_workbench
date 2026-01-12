@@ -212,6 +212,7 @@ services:
     image: ghcr.io/bmaltais/kohya-ss-gui:latest
     profiles: [kohya]
     restart: unless-stopped
+    user: "1000:1000"
     ports: ["7860:7860"]
     volumes:
       - ./data:/app/data:rw
@@ -219,10 +220,11 @@ services:
       - ./outputs:/app/outputs:rw
       - ./logs:/app/logs:rw
       - ./config:/app/config:rw
-      - huggingface-cache:/root/.cache/huggingface
+      - ./cache:/app/.cache:rw
     working_dir: /app
     environment:
-      HF_HOME: /root/.cache/huggingface
+      HF_HOME: /app/.cache/huggingface
+      TRANSFORMERS_CACHE: /app/.cache/huggingface
       WANDB_API_KEY: ${WANDB_API_KEY:-}
     deploy:
       resources:
