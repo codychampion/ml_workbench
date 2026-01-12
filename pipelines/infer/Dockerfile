@@ -26,9 +26,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN useradd --create-home --shell /bin/bash --uid 1000 mlops \
     && mkdir -p /workspace && chown -R mlops:mlops /workspace
 
-# Inference dependencies - use PyTorch nightly for RTX 5090 support
+# Inference dependencies - use PyTorch nightly with CUDA 12.8 for RTX 5090 sm_120 support
 RUN uv pip install --system --no-cache --pre \
-    --extra-index-url https://download.pytorch.org/whl/nightly/cu126 \
+    --extra-index-url https://download.pytorch.org/whl/nightly/cu128 \
     torch torchvision \
     transformers>=4.36.0 \
     diffusers>=0.30.0 \
