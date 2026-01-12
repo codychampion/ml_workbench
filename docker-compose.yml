@@ -197,7 +197,7 @@ services:
     ports: ["8188:8188"]
     volumes:
       - ./models:/app/models:rw
-      - ./outputs:/app/output:rw
+      - ./outputs:/app/outputs:rw
       - ./data:/app/input/custom:ro
       - ./workflows:/app/workflows:rw
       - comfyui-user:/app/user
@@ -214,10 +214,10 @@ services:
     restart: unless-stopped
     ports: ["7860:7860"]
     volumes:
-      - ./data:/workspace/dataset:rw
-      - ./models:/workspace/models:rw
-      - ./outputs:/workspace/output:rw
-      - ./logs:/workspace/logs:rw
+      - ./data:/app/data:rw
+      - ./models:/app/models:rw
+      - ./outputs:/app/outputs:rw
+      - ./logs:/app/logs:rw
       - huggingface-cache:/root/.cache/huggingface
     environment:
       HF_HOME: /root/.cache/huggingface
