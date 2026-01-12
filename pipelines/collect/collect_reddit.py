@@ -22,9 +22,27 @@ from typing import Optional, Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from utils.decorators import flow, task
-from utils.hydra_aim import init_aim_from_hydra
-from utils.manifest import record_collection_manifest
+# Optional imports - use no-op decorators if not available
+try:
+    from utils.decorators import flow, task
+except ImportError:
+    # No-op decorators if dependencies missing
+    def flow(func):
+        return func
+    def task(func):
+        return func
+
+try:
+    from utils.hydra_aim import init_aim_from_hydra
+except ImportError:
+    def init_aim_from_hydra(*args, **kwargs):
+        return None
+
+try:
+    from utils.manifest import record_collection_manifest
+except ImportError:
+    def record_collection_manifest(*args, **kwargs):
+        pass
 
 # Optional Hydra integration
 try:

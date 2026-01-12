@@ -21,8 +21,23 @@ from PIL import Image
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from config import get_config
-from utils.storage import get_s3_client
+
+# Optional imports
+try:
+    from config import get_config
+except ImportError:
+    def get_config():
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            compute=SimpleNamespace(device="cuda" if torch.cuda.is_available() else "cpu"),
+            aim=SimpleNamespace(repo="./outputs/aim", experiment="video-lora")
+        )
+
+try:
+    from utils.storage import get_s3_client
+except ImportError:
+    def get_s3_client(*args, **kwargs):
+        return None
 
 try:
     from aim import Run
