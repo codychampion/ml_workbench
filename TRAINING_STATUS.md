@@ -1,8 +1,10 @@
 # LoRA Training Status
 
-## ✅ READY TO TRAIN
+## ⚠️ BLOCKED - Official Training Script Has Compatibility Issues
 
-We've successfully implemented the official HunyuanVideo-1.5 training integration!
+We've encountered fundamental compatibility issues with the official HunyuanVideo-1.5 training script.
+
+**See `HUNYUANVIDEO_TRAINING_ISSUES.md` for full technical analysis and alternative solutions.**
 
 ### Implementation Complete ✅
 - ✅ Docker setup with CUDA 12.8 for RTX 5090
@@ -15,7 +17,27 @@ We've successfully implemented the official HunyuanVideo-1.5 training integratio
 - ✅ Gradient checkpointing for memory efficiency
 - ✅ Dataset preparation pipeline
 
-### Previous Issues (Now Resolved) ✅
+### Current Issues ❌
+
+**VAE Configuration Error**:
+```
+TypeError: AutoencoderKLConv3D.__init__() missing 4 required positional arguments:
+'ffactor_spatial', 'ffactor_temporal', 'sample_size', and 'sample_tsize'
+```
+
+The official training script uses a custom VAE class that requires config parameters not present in the public HuggingFace models (`tencent/HunyuanVideo-1.5` or `hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v`).
+
+### Recommended Alternatives ⭐
+
+Instead of the official script, use proven community solutions:
+
+1. **Musubi Tuner** (Kohya-ss) - Most recommended, specifically designed for video LoRA training
+2. **SimpleTuner** - General-purpose tool with HunyuanVideo 1.5 support
+3. **FineTrainers** - Diffusers-based with HunyuanVideo support
+
+See `HUNYUANVIDEO_TRAINING_ISSUES.md` for detailed comparison and setup instructions.
+
+### Previous Issues (Resolved but Blocked by VAE Error) ⚠️
 1. **ComfyUI Safetensors**: FP8 quantized format incompatible with diffusers
    - ✅ **Solution**: Using official HunyuanVideo training code instead
 

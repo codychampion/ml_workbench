@@ -54,7 +54,8 @@ RUN uv pip install --system --no-cache \
 # Install HunyuanVideo-1.5 training dependencies
 RUN uv pip install --system --no-cache \
     loguru einops imageio imageio-ffmpeg av opencv-python \
-    wandb timm ftfy regex
+    wandb timm ftfy regex \
+    huggingface_hub[cli]>=0.20.0
 
 RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs /workspace/.cache/huggingface \
     && chown -R mlops:mlops /workspace

@@ -12,6 +12,43 @@ import sys
 import subprocess
 from pathlib import Path
 import json
+import os
+
+def download_model_if_needed(model_id: str, local_dir: Path) -> Path:
+    """
+    Download model checkpoints from HuggingFace if not already present locally.
+
+    Returns the path to the downloaded model directory.
+    """
+    if local_dir.exists() and any(local_dir.iterdir()):
+        print(f"[Model] Using cached model at {local_dir}")
+        return local_dir
+
+    print(f"[Model] Downloading {model_id} to {local_dir}...")
+    print(f"[Model] This may take 10-30 minutes for ~33GB model...")
+
+    local_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Use huggingface-cli to download the model
+        cmd = [
+            "huggingface-cli", "download",
+            model_id,
+            "--local-dir", str(local_dir),
+            "--local-dir-use-symlinks", "False"  # Copy files instead of symlinking
+        ]
+
+        result = subprocess.run(cmd, check=True, capture_output=False)
+        print(f"[Model] Download complete: {local_dir}")
+        return local_dir
+
+    except subprocess.CalledProcessError as e:
+        print(f"[ERROR] Failed to download model: {e}")
+        print(f"[ERROR] Make sure 'huggingface-cli' is installed in the container")
+        sys.exit(1)
+    except Exception as e:
+        print(f"[ERROR] Unexpected error downloading model: {e}")
+        sys.exit(1)
 
 def prepare_dataset_for_official_training(dataset_dir: Path, output_dir: Path):
     """
@@ -113,10 +150,18 @@ def main():
     steps_per_epoch = len(list(prepared_dataset.glob("images/*"))) // args.batch_size
     max_steps = steps_per_epoch * args.epochs
 
+    # Important: When using HuggingFace repos, use tencent/HunyuanVideo-1.5
+    # The community diffusers version doesn't work with the training script
+    # Don't specify --pretrained_transformer_version for HuggingFace repos
+    model_to_use = args.model
+    if "hunyuanvideo-community" in args.model.lower():
+        print(f"[Warning] Community diffusers model not compatible with training script")
+        print(f"[Warning] Using official tencent/HunyuanVideo-1.5 instead")
+        model_to_use = "tencent/HunyuanVideo-1.5"
+
     cmd = [
         "python", str(train_script),
-        "--pretrained_model_root", args.model,
-        "--pretrained_transformer_version", "720p_t2v",
+        "--pretrained_model_root", model_to_use,
         "--output_dir", str(args.output),
         "--use_lora",
         "--lora_r", str(args.lora_rank),
