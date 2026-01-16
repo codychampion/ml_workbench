@@ -156,9 +156,15 @@ def load_model_for_lora_training(
             print(f"[Model] Loading from local safetensors: {model_path}")
             # Load state dict
             state_dict = load_file(str(model_path))
+            print(f"[Model] Loaded state dict with {len(state_dict)} keys")
+
+            # Check if this is ComfyUI format (has different key structure)
+            sample_keys = list(state_dict.keys())[:5]
+            print(f"[Model] Sample keys: {sample_keys}")
 
             # Initialize model with default config
             # For Wan 2.2 T2V 14B: uses specific architecture params
+            print(f"[Model] Initializing HunyuanVideoTransformer3DModel architecture...")
             model = HunyuanVideoTransformer3DModel.from_config({
                 "in_channels": 16,  # VAE latent channels
                 "out_channels": 16,
@@ -171,13 +177,26 @@ def load_model_for_lora_training(
                 "use_linear_projection": True,
                 "use_temporal_attention": True,
             })
+            print(f"[Model] Model initialized, loading weights...")
 
             # Load weights
-            model.load_state_dict(state_dict, strict=False)
+            missing, unexpected = model.load_state_dict(state_dict, strict=False)
             print(f"[Model] ✓ Loaded from safetensors")
+            print(f"[Model]   Missing keys: {len(missing)}, Unexpected keys: {len(unexpected)}")
+
+            if len(missing) > 100 or len(unexpected) > 100:
+                print(f"[Model] ⚠️  Warning: Many missing/unexpected keys.")
+                print(f"[Model]   This suggests ComfyUI format incompatibility.")
+                print(f"[Model]   The model may not train correctly.")
+                print(f"[Model]   Consider using: --model tencent/HunyuanVideo-1.5")
+
         except Exception as e:
+            import traceback
             print(f"[Model] Could not load safetensors: {e}")
+            print(f"[Model] Traceback:")
+            traceback.print_exc()
             print(f"[Model] Note: ComfyUI safetensors may have different format")
+            model = None
 
     # Strategy 3: Load from local directory
     if model is None and model_path_obj.exists() and model_path_obj.is_dir():
