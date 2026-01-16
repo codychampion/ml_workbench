@@ -141,14 +141,15 @@ def load_model_for_lora_training(
     if not model_path_obj.exists():
         try:
             print(f"[Model] Attempting to load from HuggingFace: {model_path}")
-            # HunyuanVideo models store transformer in subfolder
+            # HunyuanVideo models store transformer in subfolder with variant
+            # For training, use 720p_t2v (text-to-video) model
             model = HunyuanVideoTransformer3DModel.from_pretrained(
                 model_path,
-                subfolder="transformer",
+                subfolder="transformer/720p_t2v",
                 torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
                 use_safetensors=True
             )
-            print(f"[Model] ✓ Loaded from HuggingFace")
+            print(f"[Model] ✓ Loaded from HuggingFace (720p_t2v variant)")
         except Exception as e:
             print(f"[Model] Could not load from HuggingFace: {e}")
 
