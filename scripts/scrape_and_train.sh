@@ -51,12 +51,13 @@ fi
 
 # Step 2: Train LoRA (in Docker) - REAL TRAINING
 echo ""
-echo "[2/2] 🚀 Training LoRA (REAL diffusion training)..."
+echo "[2/2] 🚀 Training LoRA (REAL diffusion training with Wan 2.2)..."
 # Use relative path - Docker mounts . to /workspace
 docker compose --profile pipeline run --rm -e MSYS_NO_PATHCONV=1 train \
     python pipelines/train/train_video_lora_real.py \
     --dataset "${OUTPUT_DIR}" \
     --concept "${CONCEPT}" \
+    --model "./models/unet/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors" \
     --epochs "${EPOCHS}" \
     --batch-size 1 \
     --learning-rate 1e-4 \

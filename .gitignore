@@ -83,7 +83,10 @@ outputs/wandb/
 *.h5
 *.pkl
 *.joblib
-models/
+*.safetensors
+models/**/*.safetensors
+models/**/*.ckpt
+models/**/*.bin
 
 # =============================================================================
 # Secrets & Credentials
