@@ -127,6 +127,8 @@ def main():
         "--dtype", "bf16",
         "--save_interval", "500",
         "--log_interval", "10",
+        "--sp_size", "1",  # Single GPU (no sequence parallelism)
+        "--enable_gradient_checkpointing",  # Memory efficiency
     ]
 
     print(f"[Training] Estimated steps: {max_steps} ({steps_per_epoch} steps/epoch × {args.epochs} epochs)")
