@@ -54,6 +54,10 @@ RUN uv pip install --system --no-cache \
 RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs /workspace/.cache/huggingface \
     && chown -R mlops:mlops /workspace
 
+# Clone official HunyuanVideo-1.5 training code
+RUN git clone https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5.git /workspace/HunyuanVideo-1.5 \
+    && chown -R mlops:mlops /workspace/HunyuanVideo-1.5
+
 COPY --chown=mlops:mlops config.py /workspace/
 COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
 COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/
