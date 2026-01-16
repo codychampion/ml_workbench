@@ -51,6 +51,11 @@ RUN uv pip install --system --no-cache \
     python-dotenv pyyaml \
     sentencepiece bitsandbytes
 
+# Install HunyuanVideo-1.5 training dependencies
+RUN uv pip install --system --no-cache \
+    loguru einops imageio imageio-ffmpeg av opencv-python \
+    wandb timm ftfy regex
+
 RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs /workspace/.cache/huggingface \
     && chown -R mlops:mlops /workspace
 
