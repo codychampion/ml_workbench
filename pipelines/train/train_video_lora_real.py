@@ -192,21 +192,23 @@ def load_model_for_lora_training(
         except Exception as e:
             print(f"[Model] Could not load from directory: {e}")
 
-    # Fallback: Use HuggingFace default
+    # Fallback: Try simplified HunyuanVideo-1.5 path
     if model is None:
-        print(f"[Model] Falling back to downloading from HuggingFace: tencent/HunyuanVideo")
-        try:
-            model = HunyuanVideoTransformer3DModel.from_pretrained(
-                "tencent/HunyuanVideo",
-                torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
-                use_safetensors=True,
-                subfolder="transformer"
-            )
-            print(f"[Model] ✓ Loaded HunyuanVideo from HuggingFace")
-        except Exception as e:
-            print(f"[Model] ERROR: Could not load model: {e}")
-            print(f"[Model] Please provide a valid model path or ensure HuggingFace access")
-            raise
+        print(f"[Model] ERROR: Could not load model from: {model_path}")
+        print(f"[Model] ")
+        print(f"[Model] Tried:")
+        print(f"[Model]   - HuggingFace download")
+        print(f"[Model]   - Local safetensors file")
+        print(f"[Model]   - Local directory")
+        print(f"[Model] ")
+        print(f"[Model] Please provide a valid model path:")
+        print(f"[Model]   - Local: /path/to/wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors")
+        print(f"[Model]   - Local dir: /path/to/model_directory")
+        print(f"[Model]   - HuggingFace: tencent/HunyuanVideo-1.5 or Wan-AI/Wan2.2-T2V-A14B")
+        print(f"[Model] ")
+        print(f"[Model] Note: For Windows paths in Docker, use relative paths:")
+        print(f"[Model]   docker compose run train python ... --model ./models/wan2.2.safetensors")
+        raise RuntimeError(f"Could not load model from {model_path}")
 
     model = model.to(device)
 
@@ -479,7 +481,7 @@ def main():
 
     parser.add_argument("--dataset", "-d", type=Path, required=True, help="Dataset directory")
     parser.add_argument("--concept", "-c", type=str, required=True, help="Concept name")
-    parser.add_argument("--model", type=str, default="tencent/HunyuanVideo",
+    parser.add_argument("--model", type=str, required=True,
                         help="Model path (HuggingFace repo, local dir, or .safetensors file)")
     parser.add_argument("--output", "-o", type=Path, default=None)
     parser.add_argument("--epochs", type=int, default=5)

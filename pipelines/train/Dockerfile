@@ -48,7 +48,7 @@ RUN uv pip install --system --no-cache \
     python-dotenv pyyaml \
     sentencepiece bitsandbytes
 
-RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs \
+RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs /workspace/.cache/huggingface \
     && chown -R mlops:mlops /workspace
 
 COPY --chown=mlops:mlops config.py /workspace/
