@@ -5,6 +5,15 @@
 - RTX 5090 (or other CUDA-capable GPU with 24GB+ VRAM)
 - Dataset of images scraped with the collect pipeline
 
+## Important: Model Path
+
+The official HunyuanVideo-1.5 training script requires a **diffusers-formatted model**.
+
+**✅ Correct model path**: `hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v`
+**❌ Wrong model path**: `tencent/HunyuanVideo-1.5` (not in diffusers format)
+
+The `hunyuanvideo-community` version has the model weights in a format compatible with the training script, including the `model_index.json` file that describes the pipeline structure.
+
 ## Step 1: Rebuild Docker Image
 ```bash
 docker compose build train
@@ -23,7 +32,7 @@ docker compose --profile pipeline run --rm train \
     python pipelines/train/train_hunyuan_official.py \
     --dataset data/scraped/your_dataset \
     --concept "your_concept_name" \
-    --model "tencent/HunyuanVideo-1.5" \
+    --model "hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v" \
     --epochs 20
 ```
 
@@ -33,11 +42,13 @@ docker compose --profile pipeline run --rm train \
     python pipelines/train/train_hunyuan_official.py \
     --dataset data/scraped/fallout_nv_20260116_113625 \
     --concept "fallout_nv" \
-    --model "tencent/HunyuanVideo-1.5" \
+    --model "hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v" \
     --epochs 20 \
     --lora-rank 8 \
     --lora-alpha 16
 ```
+
+**Important**: Use the diffusers-formatted model `hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v`, not `tencent/HunyuanVideo-1.5`!
 
 ### All Available Arguments
 ```bash

@@ -47,15 +47,17 @@ docker compose --profile pipeline run --rm train \
     python pipelines/train/train_hunyuan_official.py \
     --dataset data/scraped/fallout_nv_20260116_113625 \
     --concept "fallout_nv" \
-    --model "tencent/HunyuanVideo-1.5" \
+    --model "hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v" \
     --epochs 20 \
     --lora-rank 8 \
     --lora-alpha 16
 ```
 
+**Important**: Use the diffusers-formatted model from `hunyuanvideo-community`, not `tencent/HunyuanVideo-1.5`!
+
 ### Training Configuration
 - **Dataset**: 34 Fallout New Vegas images
-- **Model**: tencent/HunyuanVideo-1.5 (720p_t2v variant)
+- **Model**: hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v
 - **LoRA**: rank=8, alpha=16
 - **Learning rate**: 1e-4
 - **Batch size**: 1
