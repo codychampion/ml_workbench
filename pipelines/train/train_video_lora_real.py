@@ -141,8 +141,10 @@ def load_model_for_lora_training(
     if not model_path_obj.exists():
         try:
             print(f"[Model] Attempting to load from HuggingFace: {model_path}")
+            # HunyuanVideo models store transformer in subfolder
             model = HunyuanVideoTransformer3DModel.from_pretrained(
                 model_path,
+                subfolder="transformer",
                 torch_dtype=torch.bfloat16 if device == "cuda" else torch.float32,
                 use_safetensors=True
             )
