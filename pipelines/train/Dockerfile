@@ -64,6 +64,13 @@ RUN mkdir -p /workspace/data/annotated /workspace/models /workspace/outputs /wor
 RUN git clone https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5.git /opt/HunyuanVideo-1.5 \
     && chown -R mlops:mlops /opt/HunyuanVideo-1.5
 
+# Clone Musubi Tuner for working HunyuanVideo LoRA training
+RUN git clone https://github.com/kohya-ss/musubi-tuner.git /opt/musubi-tuner \
+    && chown -R mlops:mlops /opt/musubi-tuner
+
+# Install Musubi Tuner dependencies
+RUN cd /opt/musubi-tuner && uv pip install --system --no-cache -e .
+
 COPY --chown=mlops:mlops config.py /workspace/
 COPY --chown=mlops:mlops data_transfer/ /workspace/data_transfer/
 COPY --chown=mlops:mlops pipelines/ /workspace/pipelines/

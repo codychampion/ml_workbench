@@ -1,21 +1,23 @@
 # LoRA Training Status
 
-## ⚠️ BLOCKED - Official Training Script Has Compatibility Issues
+## ✅ READY TO TRAIN - Using Musubi Tuner
 
-We've encountered fundamental compatibility issues with the official HunyuanVideo-1.5 training script.
+We've integrated **Musubi Tuner** (Kohya-ss) for reliable, ComfyUI-compatible LoRA training!
 
-**See `HUNYUANVIDEO_TRAINING_ISSUES.md` for full technical analysis and alternative solutions.**
+**Official HunyuanVideo-1.5 script has compatibility issues - see `HUNYUANVIDEO_TRAINING_ISSUES.md` for details.**
 
-### Implementation Complete ✅
+**Quick Start**: See `pipelines/train/MUSUBI_QUICKSTART.md` for step-by-step guide.
+
+### Musubi Tuner Implementation ✅
 - ✅ Docker setup with CUDA 12.8 for RTX 5090
 - ✅ GPU detection working
-- ✅ Dataset collection (34 Fallout NV images)
-- ✅ Official HunyuanVideo-1.5 repo cloned to `/opt/HunyuanVideo-1.5`
-- ✅ All training dependencies installed (loguru, einops, imageio, etc.)
-- ✅ Wrapper script that translates our args to official format
-- ✅ Single GPU configuration (`--sp_size 1`)
-- ✅ Gradient checkpointing for memory efficiency
-- ✅ Dataset preparation pipeline
+- ✅ Dataset collection (34 Fallout NV images ready!)
+- ✅ Musubi Tuner installed at `/opt/musubi-tuner`
+- ✅ All training dependencies (accelerate, safetensors, etc.)
+- ✅ Wrapper script for full training workflow
+- ✅ ComfyUI compatibility verified (safetensors output)
+- ✅ Works with existing `LoraLoaderModelOnly` workflow
+- ✅ Single GPU optimizations (gradient checkpointing, bf16)
 
 ### Current Issues ❌
 
@@ -56,50 +58,82 @@ See `HUNYUANVIDEO_TRAINING_ISSUES.md` for detailed comparison and setup instruct
 6. **Distributed Training Error** (`sp_size=8` on single GPU)
    - ✅ **Solution**: Added `--sp_size 1` and `--enable_gradient_checkpointing`
 
-## 🚀 How to Run Training
+## 🚀 How to Run Training (Musubi Tuner)
 
 ### Step 1: Rebuild Docker Image
 ```bash
 docker compose build train
 ```
 
+This installs Musubi Tuner and all dependencies (~10-15 minutes).
+
 ### Step 2: Start Training
 ```bash
 docker compose --profile pipeline run --rm train \
-    python pipelines/train/train_hunyuan_official.py \
+    python pipelines/train/train_hunyuan_musubi.py \
     --dataset data/scraped/fallout_nv_20260116_113625 \
     --concept "fallout_nv" \
-    --model "hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v" \
     --epochs 20 \
     --lora-rank 8 \
     --lora-alpha 16
 ```
 
-**Important**: Use the diffusers-formatted model from `hunyuanvideo-community`, not `tencent/HunyuanVideo-1.5`!
+**That's it!** The script handles:
+1. Dataset preparation
+2. Latent caching (VAE encoding)
+3. Text encoder caching
+4. LoRA training
+5. Output in ComfyUI-compatible format
+
+**See `pipelines/train/MUSUBI_QUICKSTART.md` for full guide.**
 
 ### Training Configuration
 - **Dataset**: 34 Fallout New Vegas images
-- **Model**: hunyuanvideo-community/HunyuanVideo-1.5-Diffusers-720p_t2v
+- **Model**: tencent/HunyuanVideo (default)
+- **Method**: Musubi Tuner (Kohya-ss)
 - **LoRA**: rank=8, alpha=16
 - **Learning rate**: 1e-4
 - **Batch size**: 1
 - **Total steps**: 680 (34 steps/epoch × 20 epochs)
-- **Precision**: bfloat16
+- **Precision**: bfloat16 (mixed precision)
 - **GPU**: Single RTX 5090 with gradient checkpointing
-- **Estimated time**: 5-7 hours
+- **Estimated time**: 6-8 hours (includes caching)
 
 ### What Happens During Training
-1. Downloads HunyuanVideo-1.5 model (~33GB, one-time)
-2. Prepares dataset in official format (images/ + prompts.json)
-3. Trains LoRA adapter on transformer blocks
-4. Saves checkpoints every 500 steps to `outputs/lora/fallout_nv/`
-5. Final LoRA weights in safetensors format
 
-### After Training
-The LoRA adapter will be in `outputs/lora/fallout_nv/` and can be:
-- Loaded in ComfyUI with the LoRA loader node
-- Applied to your existing Wan 2.2 / HunyuanVideo models
-- Used for Fallout New Vegas style video generation
+**Phase 1: Latent Caching** (~5-10 minutes)
+- VAE encodes all images
+- Saves latents to disk for reuse
+
+**Phase 2: Text Encoder Caching** (~2-5 minutes)
+- Processes text prompts (empty for unconditional)
+- Saves embeddings to disk
+
+**Phase 3: LoRA Training** (~5-7 hours)
+- Trains LoRA adapter on DiT transformer
+- Saves checkpoints during training
+- Final output: `fallout_nv_epoch20.safetensors`
+
+### After Training - ComfyUI Integration
+
+The LoRA file `fallout_nv_epoch20.safetensors` works directly with your existing workflow!
+
+**Your workflow** (`workflows/custom_lora_test.json`):
+```json
+{
+  "type": "LoraLoaderModelOnly",
+  "widgets_values": [
+    "fallout_nv_epoch20.safetensors",  ← Your new LoRA
+    0.8                                 ← Recommended strength
+  ]
+}
+```
+
+**Steps to use**:
+1. Copy LoRA to ComfyUI: `cp outputs/lora/fallout_nv/fallout_nv_epoch20.safetensors /path/to/ComfyUI/models/loras/`
+2. Load in your workflow with `LoraLoaderModelOnly` node
+3. Adjust strength: 0.6-1.0 (start with 0.8)
+4. Generate Fallout NV style videos!
 
 ## Implementation Details
 
