@@ -35,8 +35,8 @@ def check_models_downloaded() -> bool:
     required_files = [
         MODELS_DIR / "vae" / "diffusion_pytorch_model.safetensors",
         MODELS_DIR / "transformer" / "720p_t2v" / "diffusion_pytorch_model.safetensors",
-        MODELS_DIR / "split_files" / "text_encoders" / "qwen_2.5_vl_7b.safetensors",
-        MODELS_DIR / "split_files" / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors",
+        MODELS_DIR / "text_encoders" / "qwen_2.5_vl_7b.safetensors",
+        MODELS_DIR / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors",
     ]
 
     return all(f.exists() for f in required_files)
@@ -54,30 +54,70 @@ def download_models():
     print()
     print("These files will be cached. Future training runs skip this step.")
     print()
-    print("Downloading from: Comfy-Org/HunyuanVideo_repackaged")
-    print("This may take 10-30 minutes depending on your connection...")
-    print()
 
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Download main model (DiT + VAE) from Tencent
+    print("Step 1/2: Downloading DiT & VAE from tencent/HunyuanVideo-1.5...")
     cmd = [
         "huggingface-cli", "download",
-        "Comfy-Org/HunyuanVideo_repackaged",
+        "tencent/HunyuanVideo-1.5",
         "--local-dir", str(MODELS_DIR),
+        "--local-dir-use-symlinks", "False",
+        "--include", "transformer/720p_t2v/*",
+        "--include", "vae/*"
+    ]
+
+    try:
+        subprocess.run(cmd, check=True)
+        print("✅ DiT & VAE downloaded")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Download failed: {e}")
+        print("\nTroubleshooting:")
+        print("1. Check internet connection")
+        print("2. Verify HuggingFace access (may need token)")
+        print("3. Ensure sufficient disk space (~50GB)")
+        print(f"\nManual download: https://huggingface.co/tencent/HunyuanVideo-1.5")
+        return False
+
+    # Download text encoders from ComfyUI repackaged (they're in FP16 but compatible)
+    print("\nStep 2/2: Downloading text encoders from Comfy-Org...")
+    text_encoder_dir = MODELS_DIR / "text_encoders"
+    text_encoder_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "huggingface-cli", "download",
+        "Comfy-Org/HunyuanVideo_1.5_repackaged",
+        "split_files/text_encoders/qwen_2.5_vl_7b.safetensors",
+        "split_files/text_encoders/byt5_small_glyphxl_fp16.safetensors",
+        "--local-dir", str(MODELS_DIR / "temp_download"),
         "--local-dir-use-symlinks", "False"
     ]
 
     try:
         subprocess.run(cmd, check=True)
-        print("\n✅ Models downloaded successfully!")
-        return True
+        # Move files to correct location
+        temp_dir = MODELS_DIR / "temp_download" / "split_files" / "text_encoders"
+        import shutil
+        if (temp_dir / "qwen_2.5_vl_7b.safetensors").exists():
+            shutil.move(
+                str(temp_dir / "qwen_2.5_vl_7b.safetensors"),
+                str(text_encoder_dir / "qwen_2.5_vl_7b.safetensors")
+            )
+        if (temp_dir / "byt5_small_glyphxl_fp16.safetensors").exists():
+            shutil.move(
+                str(temp_dir / "byt5_small_glyphxl_fp16.safetensors"),
+                str(text_encoder_dir / "byt5_small_glyphxl_fp16.safetensors")
+            )
+        # Clean up temp directory
+        shutil.rmtree(str(MODELS_DIR / "temp_download"), ignore_errors=True)
+        print("✅ Text encoders downloaded")
     except subprocess.CalledProcessError as e:
-        print(f"\n❌ Download failed: {e}")
-        print("\nTroubleshooting:")
-        print("1. Check internet connection")
-        print("2. Verify HuggingFace access (may need token for some models)")
-        print("3. Ensure sufficient disk space (~50GB)")
+        print(f"❌ Text encoder download failed: {e}")
         return False
+
+    print("\n✅ All models downloaded successfully!")
+    return True
 
 
 def prepare_dataset(dataset_dir: Path, output_dir: Path, resolution: list) -> tuple[Path, int]:
@@ -167,8 +207,8 @@ def cache_text_encoders(config_file: Path, skip_if_exists: bool = True) -> bool:
     print("Processing text prompts...")
     print("This takes 2-5 minutes (one-time per dataset)")
 
-    text_encoder = MODELS_DIR / "split_files" / "text_encoders" / "qwen_2.5_vl_7b.safetensors"
-    byt5 = MODELS_DIR / "split_files" / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors"
+    text_encoder = MODELS_DIR / "text_encoders" / "qwen_2.5_vl_7b.safetensors"
+    byt5 = MODELS_DIR / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors"
     script = MUSUBI_DIR / "src" / "musubi_tuner" / "hv_1_5_cache_text_encoder_outputs.py"
 
     cmd = [
@@ -204,8 +244,8 @@ def train_lora(
 
     dit = MODELS_DIR / "transformer" / "720p_t2v" / "diffusion_pytorch_model.safetensors"
     vae = MODELS_DIR / "vae" / "diffusion_pytorch_model.safetensors"
-    text_encoder = MODELS_DIR / "split_files" / "text_encoders" / "qwen_2.5_vl_7b.safetensors"
-    byt5 = MODELS_DIR / "split_files" / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors"
+    text_encoder = MODELS_DIR / "text_encoders" / "qwen_2.5_vl_7b.safetensors"
+    byt5 = MODELS_DIR / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors"
     script = MUSUBI_DIR / "src" / "musubi_tuner" / "hv_1_5_train_network.py"
 
     total_steps = num_images * epochs

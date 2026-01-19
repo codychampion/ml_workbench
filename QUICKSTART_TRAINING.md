@@ -3,13 +3,13 @@
 ## The Simple Truth
 
 Training a LoRA for HunyuanVideo requires the **full model components** (~33GB):
-- DiT Transformer
-- VAE (for encoding images)
-- Text Encoders (Qwen 2.5 VL + BYT5)
+- DiT Transformer (from `tencent/HunyuanVideo-1.5`)
+- VAE (from `tencent/HunyuanVideo-1.5`)
+- Text Encoders: Qwen 2.5 VL + BYT5 (from `Comfy-Org/HunyuanVideo_1.5_repackaged`)
 
 Your FP8 quantized ComfyUI model alone (`wan2.2_t2v_high_noise_14B_fp8_scaled.safetensors`) **cannot be used for training** because:
-1. It's quantized (loses gradient information)
-2. It's only the high_noise expert (missing other components)
+1. It's quantized (loses gradient information needed for backpropagation)
+2. It's only the high_noise expert (missing other MoE components)
 3. It's missing VAE and text encoders
 
 **Good news**: The download is **one-time only**. After first run, training starts immediately.
