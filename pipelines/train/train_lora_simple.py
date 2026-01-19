@@ -59,20 +59,21 @@ def download_models():
 
     # Download main model (DiT + VAE) from Tencent
     print("Step 1/2: Downloading DiT & VAE from tencent/HunyuanVideo-1.5...")
+    print("(Downloading full repo - this ensures all files are retrieved correctly)")
     cmd = [
         "huggingface-cli", "download",
         "tencent/HunyuanVideo-1.5",
         "--local-dir", str(MODELS_DIR),
-        "--local-dir-use-symlinks", "False",
-        "--include", "transformer/720p_t2v/*",
-        "--include", "vae/*"
+        "--local-dir-use-symlinks", "False"
     ]
 
     try:
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         print("✅ DiT & VAE downloaded")
     except subprocess.CalledProcessError as e:
         print(f"❌ Download failed: {e}")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
         print("\nTroubleshooting:")
         print("1. Check internet connection")
         print("2. Verify HuggingFace access (may need token)")
@@ -95,7 +96,7 @@ def download_models():
     ]
 
     try:
-        subprocess.run(cmd, check=True)
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         # Move files to correct location
         temp_dir = MODELS_DIR / "temp_download" / "split_files" / "text_encoders"
         import shutil
@@ -114,9 +115,40 @@ def download_models():
         print("✅ Text encoders downloaded")
     except subprocess.CalledProcessError as e:
         print(f"❌ Text encoder download failed: {e}")
+        print(f"STDOUT: {e.stdout}")
+        print(f"STDERR: {e.stderr}")
         return False
 
-    print("\n✅ All models downloaded successfully!")
+    # Verify all files exist
+    print("\n=== Verifying Downloaded Files ===")
+    required_files = [
+        MODELS_DIR / "vae" / "diffusion_pytorch_model.safetensors",
+        MODELS_DIR / "transformer" / "720p_t2v" / "diffusion_pytorch_model.safetensors",
+        MODELS_DIR / "text_encoders" / "qwen_2.5_vl_7b.safetensors",
+        MODELS_DIR / "text_encoders" / "byt5_small_glyphxl_fp16.safetensors",
+    ]
+
+    all_exist = True
+    for f in required_files:
+        exists = f.exists()
+        status = "✅" if exists else "❌"
+        size = f"{f.stat().st_size / (1024**3):.2f} GB" if exists else "MISSING"
+        print(f"{status} {f.name}: {size}")
+        if not exists:
+            all_exist = False
+
+    if not all_exist:
+        print("\n❌ Some files are missing after download!")
+        print("Checking what was actually downloaded...")
+        print(f"\nContents of {MODELS_DIR}:")
+        for item in MODELS_DIR.rglob("*"):
+            if item.is_file():
+                rel_path = item.relative_to(MODELS_DIR)
+                size_mb = item.stat().st_size / (1024**2)
+                print(f"  {rel_path} ({size_mb:.1f} MB)")
+        return False
+
+    print("\n✅ All models downloaded and verified successfully!")
     return True
 
 
