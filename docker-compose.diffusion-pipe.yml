@@ -1,11 +1,8 @@
-version: '3.8'
-
 services:
   # Diffusion-Pipe LoRA Trainer with Gradio UI
   diffusion-pipe:
     image: alissonpereiraanjos/diffusion-pipe-interface:latest
     container_name: hunyuan-lora-trainer
-    profiles: [training]
 
     deploy:
       resources:
