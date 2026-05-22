@@ -9,7 +9,7 @@ import pytest
 import requests
 import json
 import time
-from conftest import SERVICE_HOST
+from tests.conftest import SERVICE_HOST
 
 
 class TestKhojIntegration:

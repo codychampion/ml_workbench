@@ -1,7 +1,7 @@
 """Service Health Check Tests - Lean Stack."""
 
 import pytest
-from conftest import SERVICES, check_http_health
+from tests.conftest import SERVICES, check_http_health
 
 
 class TestCoreInfrastructure:

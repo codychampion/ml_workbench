@@ -9,7 +9,7 @@ import io
 import json
 import pytest
 from datetime import datetime
-from conftest import SERVICE_HOST
+from tests.conftest import SERVICE_HOST
 
 
 class TestMinIOBuckets:

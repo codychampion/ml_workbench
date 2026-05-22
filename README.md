@@ -33,16 +33,16 @@ The result is a practical lab environment for testing ideas quickly without losi
 ## Architecture at a glance
 
 ```text
-Plan → Collect → Annotate → Train → Evaluate → Infer → Track → Register
- │       │          │         │        │        │       │        │
- │       │          │         │        │        │       │        └─ model registry scripts
- │       │          │         │        │        │       └───────── AIM + run summaries
- │       │          │         │        │        └───────────────── generation / inference jobs
- │       │          │         │        └────────────────────────── benchmark pipelines
- │       │          │         └─────────────────────────────────── LoRA training pipelines
- │       │          └───────────────────────────────────────────── BLIP captions + Label Studio
- │       └──────────────────────────────────────────────────────── Reddit / HF / CUAD collectors
- └──────────────────────────────────────────────────────────────── Obsidian knowledge vault
+Plan -> Collect -> Annotate -> Train -> Evaluate -> Infer -> Track -> Register
+        |          |          |       |          |        |        |
+        |          |          |       |          |        |        +-- model registry scripts
+        |          |          |       |          |        +----------- AIM + run summaries
+        |          |          |       |          +-------------------- generation / inference jobs
+        |          |          |       +------------------------------- benchmark pipelines
+        |          |          +--------------------------------------- LoRA training pipelines
+        |          +-------------------------------------------------- BLIP captions + Label Studio
+        +------------------------------------------------------------- Reddit / HF / CUAD collectors
+Plan inputs also flow from the Obsidian knowledge vault.
 ```
 
 ## Quick start
@@ -159,10 +159,10 @@ Open `./knowledge/` in Obsidian. The vault is organized around experiment planni
 
 ```text
 knowledge/
-├── papers/notes/          # Paper notes
-├── experiments/plans/     # Experiment plans
-├── experiments/runs/      # Run summaries
-└── models/registry/       # Model registry records
+|-- papers/notes/          # Paper notes
+|-- experiments/plans/     # Experiment plans
+|-- experiments/runs/      # Run summaries
+`-- models/registry/       # Model registry records
 ```
 
 Khoj can index the vault so the workbench has a chat surface over research notes, experimental plans, and run history.
@@ -196,19 +196,20 @@ python scripts/labelstudio_sync.py export --dataset my-ds # Export Label Studio 
 
 ```text
 ml_workbench/
-├── conf/              # Hydra configuration
-├── data_transfer/     # S3 client utilities
-├── docker/            # Docker configs
-├── knowledge/         # Obsidian knowledge vault
-├── models/            # Model artifacts
-├── outputs/           # Pipeline outputs and AIM logs
-├── pipelines/         # Collection, annotation, training, evaluation, inference
-├── scripts/           # Glue scripts and operational utilities
-├── services/          # Service-specific code
-├── tests/             # Integration tests
-└── utils/             # Shared utilities
+|-- conf/              # Hydra configuration
+|-- data_transfer/     # S3 client utilities
+|-- docker/            # Docker configs
+|-- knowledge/         # Obsidian knowledge vault
+|-- models/            # Model artifacts
+|-- outputs/           # Pipeline outputs and AIM logs
+|-- pipelines/         # Collection, annotation, training, evaluation, inference
+|-- scripts/           # Glue scripts and operational utilities
+|-- services/          # Service-specific code
+|-- tests/             # Integration tests
+`-- utils/             # Shared utilities
 ```
 
 ## Good fit for
 
 This workbench is useful for local-first ML experimentation, data and model pipeline prototyping, AI safety or red-team workflows, multimodal dataset curation, retrieval and knowledge-work experiments, and testing the operational shape of an ML idea before turning it into a more formal service.
+
